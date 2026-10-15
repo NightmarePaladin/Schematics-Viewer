@@ -144,3 +144,11 @@
   --sidebar-primary-foreground: oklch(0.2 0.02 70);
 }
 body { font-family: var(--font-sans), system-ui, sans-serif; }
+
+/* Native <select> popups ignore transparent backgrounds: give them explicit theme colors so options are readable in light and dark. */
+:root { color-scheme: light; }
+.dark { color-scheme: dark; }
+select { background-color: var(--background); color: var(--foreground); }
+select option, select optgroup { background-color: var(--popover); color: var(--popover-foreground); }
+select option:disabled { color: var(--muted-foreground); }
+select:disabled { opacity: 0.6; }
