@@ -1,6 +1,7 @@
 import "server-only";
 import type { SessionContext } from "./auth";
 import { ApiError, fromDbError } from "./api";
+import { deriveStatus } from "./machine-status";
 
 export interface InoperableSource {
   id: string;
@@ -31,7 +32,31 @@ export function causeIds(inop: Map<string, InoperableSource[]>): Set<string> {
   return out;
 }
 
-export const effectiveStatus = (stored: string, inherited: boolean) => (inherited ? "inoperable" : stored);
+export interface Faults {
+  /** machine id -> critical sub-machines whose major issue took it out of service */
+  inherited: Map<string, InoperableSource[]>;
+  /** machine id -> number of its own unresolved critical-severity issues */
+  critical: Map<string, number>;
+}
+
+/** Both derived fault signals for an organization, loaded in parallel. */
+export async function loadFaults(s: Pick<SessionContext, "supabase">, orgId: string): Promise<Faults> {
+  const [inherited, crit] = await Promise.all([
+    loadInoperable(s, orgId),
+    s.supabase.rpc("critical_fault_machines", { p_org: orgId }),
+  ]);
+  if (crit.error) throw fromDbError(crit.error);
+  const critical = new Map<string, number>();
+  for (const r of (crit.data ?? []) as { machine_id: string; issue_count: number }[]) critical.set(r.machine_id, r.issue_count);
+  return { inherited, critical };
+}
+
+/** Effective status of one machine: its stored status unless a live fault overrides it. */
+export const statusOf = (stored: string, id: string, f: Faults) =>
+  deriveStatus(stored, { critical: f.critical.has(id), inherited: f.inherited.has(id) });
+
+/** Machines currently in a fault state (own critical issue or inherited inoperable). */
+export const faultIds = (f: Faults): Set<string> => new Set([...f.inherited.keys(), ...f.critical.keys()]);
 
 /** The parent must be a machine the caller can see in the same organization (the DB also enforces same-org + no cycles). */
 export async function assertParentVisible(s: Pick<SessionContext, "supabase">, orgId: string, parentId: string | null | undefined) {

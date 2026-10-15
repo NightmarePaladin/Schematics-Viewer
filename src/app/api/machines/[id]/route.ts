@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ApiError, fromDbError, handler, notFound, parseBody } from "@/lib/api";
 import { audit, requireOrg } from "@/lib/auth";
-import { assertParentVisible, effectiveStatus, loadInoperable } from "@/lib/machines";
+import { assertParentVisible, loadFaults, statusOf } from "@/lib/machines";
 import { machineUpdateSchema } from "@/lib/schemas";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -20,9 +20,14 @@ export const GET = handler<Ctx>(async (_req, ctx) => {
   const s = await requireOrg();
   const { id } = await ctx.params;
   const m = await loadMachine(s, id);
-  const inop = await loadInoperable(s, s.orgId);
+  const faults = await loadFaults(s, s.orgId);
   return NextResponse.json({
-    data: { ...m, effective_status: effectiveStatus(m.status, inop.has(id)), inoperable_because: inop.get(id) ?? [] },
+    data: {
+      ...m,
+      effective_status: statusOf(m.status, id, faults),
+      critical_issue_count: faults.critical.get(id) ?? 0,
+      inoperable_because: faults.inherited.get(id) ?? [],
+    },
   });
 });
 

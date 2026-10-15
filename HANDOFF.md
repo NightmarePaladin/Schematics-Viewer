@@ -29,7 +29,13 @@ _Last updated: 2026-10-15._
 - Decision to confirm with the project owner: "major" = severity high **or** critical (constant `MAJOR_SEVERITIES`; SQL function `inoperable_machines`).
 - Open item for the project owner: enable **leaked password protection** in Supabase Auth settings (advisor warning).
 
-## Locations (latest)
+## Status and tree list (latest)
+- **Effective status** = critical fault (own unresolved critical-severity issue) > inoperable (inherited from a critical sub-component with a high/critical issue) > stored status. Derived live; clears on resolution. Filterable.
+- Machines list shows top-level machines only; expand with the chevron, or search/filter to see sub-machines directly. The machine detail page still lists its sub-machines.
+- The demo "Pump P1 bearing failure" issue was resolved by a user, so the seeded Hydraulic Press 7 is currently operable; raise a high issue on "Hydraulic Power Unit HPU-7" (a critical component) to see the inheritance, or a *critical* issue to see "critical fault".
+- Run E2E against `next start` for reliability (see TESTING.md).
+
+## Locations
 - Premade `locations` (name + optional coordinates), managed on **/locations** (button on the Machines page). Machines choose one from a dropdown; weather uses the machine's own coordinates if set, otherwise its location's.
 - A "Look up coordinates" button queries the Open-Meteo Geocoding API (no key). Existing free-text locations were converted by migration 9.
 - Data note for the project owner: the migrated location **"Shaw South Carolina"** has longitude **+80.4706**. South Carolina is in the western hemisphere, so it should almost certainly be **-80.4706** (edit it on /locations). I did not change your data.

@@ -79,6 +79,11 @@ group memberships and annotations impossible at the schema level.
 
 Errors share one shape: `{ "error": { "code", "message", "details?" } }` with 400/401/403/404/409/413/415/422/502/503.
 
+## Machine status and the Machines list
+- `src/lib/machine-status.ts` (pure, unit-tested) derives the effective status; `src/lib/machines.ts` loads both fault signals in parallel (`loadFaults`) and every consumer (list page, detail page, dashboard, `GET /api/machines`) uses the same `statusOf()`.
+- `GET /api/machines?status=` filters on the **effective** status, so `critical` and `inoperable` are valid filters; responses carry `effective_status`, `critical_issue_count`, `inoperable_because`.
+- `src/components/machine-table.tsx`: without a search/filter it renders a collapsible tree of top-level machines (machines whose parent the viewer cannot see are treated as top-level); with a search/filter it renders a flat list including sub-machines.
+
 ## Machine search and hierarchy
 - `src/lib/machine-search.ts` is shared by the Machines page and `GET /api/machines`: every word must match (case-insensitive, partial) at least one column of the chosen field group.
 - `src/lib/machine-tree.ts` holds pure tree helpers (ancestors, descendants, cycle check) plus a TypeScript mirror of the SQL inheritance rule for unit tests.

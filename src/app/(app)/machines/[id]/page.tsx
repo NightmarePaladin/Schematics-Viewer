@@ -9,7 +9,7 @@ import { Empty, IssueStatusBadge, MachineStatusBadge, Page, PageHeader, Severity
 import { requireOrgPage } from "@/lib/auth";
 import { effectiveCoords, firstOf, formatCoords } from "@/lib/location-utils";
 import { ancestorsOf, childrenOf } from "@/lib/machine-tree";
-import { causeIds, effectiveStatus, loadInoperable } from "@/lib/machines";
+import { causeIds, loadFaults, statusOf } from "@/lib/machines";
 import { canCreateMachine, canManageMachines, canUploadSchematic, canWriteMaintenance } from "@/lib/permissions";
 import { ISSUE_SELECT } from "@/lib/selects";
 import { z } from "zod";
@@ -23,10 +23,12 @@ export default async function MachineDetail({ params }: { params: Promise<{ id: 
   const { data: m } = await s.supabase.from("machines").select("*, place:locations(id, name, latitude, longitude)").eq("id", id).eq("org_id", s.orgId).maybeSingle();
   if (!m) notFound();
 
-  const [{ data: tree }, inop] = await Promise.all([
+  const [{ data: tree }, faults] = await Promise.all([
     s.supabase.from("machines").select("id, name, parent_id, is_critical, status, serial_number").eq("org_id", s.orgId).order("name"),
-    loadInoperable(s, s.orgId),
+    loadFaults(s, s.orgId),
   ]);
+  const inop = faults.inherited;
+  const ownCritical = faults.critical.get(id) ?? 0;
   const trail = ancestorsOf(tree ?? [], id).reverse();
   const subs = childrenOf(tree ?? [], id);
   const causes = inop.get(id) ?? [];
@@ -66,6 +68,12 @@ export default async function MachineDetail({ params }: { params: Promise<{ id: 
           <span className="font-medium text-foreground">{m.name}</span>
         </nav>
       )}
+      {ownCritical > 0 && (
+        <div role="alert" data-testid="critical-banner" className="mb-4 rounded-lg border border-red-700/60 bg-red-700/10 p-3 text-sm">
+          <p className="font-semibold text-red-700 dark:text-red-300">Critical fault: this machine has {ownCritical} unresolved critical issue{ownCritical === 1 ? "" : "s"}</p>
+          <p className="text-muted-foreground">Its status shows as critical until {ownCritical === 1 ? "that issue is" : "those issues are"} resolved. See the Issues section below.</p>
+        </div>
+      )}
       {causes.length > 0 && (
         <div role="alert" data-testid="inoperable-banner" className="mb-4 rounded-lg border border-red-500/50 bg-red-500/10 p-3 text-sm">
           <p className="font-semibold text-red-700 dark:text-red-300">Inoperable — inherited from a critical sub-machine</p>
@@ -91,7 +99,7 @@ export default async function MachineDetail({ params }: { params: Promise<{ id: 
         description={m.description ?? undefined}
         actions={
           <>
-            <MachineStatusBadge status={effectiveStatus(m.status, causes.length > 0)} />
+            <MachineStatusBadge status={statusOf(m.status, id, faults)} />
             {canEdit && <Link href={`/machines/${id}/edit`} className={linkButton({ variant: "outline" })}>Edit</Link>}
           </>
         }
@@ -125,7 +133,7 @@ export default async function MachineDetail({ params }: { params: Promise<{ id: 
                     <span className="ml-2 font-mono text-xs text-muted-foreground">{c.serial_number}</span>
                     {c.is_critical && <span className="ml-2 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800 dark:text-amber-300">critical</span>}
                   </span>
-                  <span className="flex items-center gap-1">{causing.has(c.id) && <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-700 dark:text-red-300">major issue</span>}<MachineStatusBadge status={effectiveStatus(c.status, inop.has(c.id))} /></span>
+                  <span className="flex items-center gap-1">{causing.has(c.id) && <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-700 dark:text-red-300">major issue</span>}<MachineStatusBadge status={statusOf(c.status, c.id, faults)} /></span>
                 </li>
               ))}
             </ul>

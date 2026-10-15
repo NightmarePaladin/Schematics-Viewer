@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import dotenv from "dotenv";
+import { adminClient, hasSupabaseCreds, seed, type SeedResult } from "../scripts/lib/seed-lib";
 import { cleanupE2eData } from "./cleanup";
 
 dotenv.config({ path: ".env.local" });
@@ -8,6 +9,32 @@ const PASSWORD = process.env.SEED_PASSWORD ?? "Demo-Pass-123!";
 const configured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 test.skip(!configured, "Supabase env vars not set — see TESTING.md");
 test.describe.configure({ mode: "serial" });
+
+// Self-contained fixtures (the demo data may have been changed by whoever is using the app):
+//   E2E System A  ->  E2E Hydraulic Unit (CRITICAL component, open HIGH issue)  and  E2E Control Box (not critical)
+const SYSTEM = "E2E System A";
+const UNIT = "E2E Hydraulic Unit";
+const BOX = "E2E Control Box";
+const stamp = Date.now();
+
+test.beforeAll(async () => {
+  if (!hasSupabaseCreds()) return;
+  const s: SeedResult = await seed();
+  const admin = adminClient();
+  const base = { org_id: s.orgId, category: "E2E", manufacturer: "E2E Works", model_number: "X", created_by: s.ids.admin };
+  const mk = async (name: string, extra: Record<string, unknown> = {}) => {
+    const { data, error } = await admin.from("machines").insert({ ...base, name, serial_number: `E2E-FIX-${name.replace(/\W+/g, "")}-${stamp}`, ...extra }).select("id").single();
+    if (error) throw error;
+    return data.id as string;
+  };
+  const system = await mk(SYSTEM);
+  const unit = await mk(UNIT, { parent_id: system, is_critical: true });
+  await mk(BOX, { parent_id: system, is_critical: false });
+  const { error } = await admin.from("maintenance_issues").insert({
+    org_id: s.orgId, machine_id: unit, title: "E2E pump bearing failure", description: "fixture", severity: "high", reporter_id: s.ids.tech,
+  });
+  if (error) throw error;
+});
 test.afterAll(async () => { await cleanupE2eData(); });
 
 async function signIn(page: Page, email: string) {
@@ -18,6 +45,11 @@ async function signIn(page: Page, email: string) {
   await expect(page.getByRole("link", { name: "Dashboard" })).toBeVisible();
 }
 
+/** The link in the NAME column (child rows also mention their parent's name in "Part of"). */
+const nameLink = (page: Page, name: string) => page.locator("tbody tr td:first-child a", { hasText: new RegExp(`^${name}$`) });
+const rowFor = (page: Page, name: string) =>
+  page.locator("tbody tr").filter({ has: page.locator("td:first-child a", { hasText: new RegExp(`^${name}$`) }) });
+
 async function search(page: Page, q: string, field: string) {
   await page.goto("/machines");
   await page.getByLabel("Search machines").fill(q);
@@ -25,10 +57,6 @@ async function search(page: Page, q: string, field: string) {
   await page.getByRole("button", { name: "Search" }).click();
   await expect(page).toHaveURL(/q=/);
 }
-/** The link in the NAME column (child rows also mention their parent's name in "Part of"). */
-const nameLink = (page: Page, name: string) => page.locator("tbody tr td:first-child a", { hasText: new RegExp(`^${name}$`) });
-const rowFor = (page: Page, name: string) =>
-  page.locator("tbody tr").filter({ has: page.locator("td:first-child a", { hasText: new RegExp(`^${name}$`) }) });
 const rowNames = (page: Page) => page.locator("tbody tr td:first-child a").allInnerTexts();
 
 test("search machines by location, name, manufacturer or model (and all fields, multi-word)", async ({ page }) => {
@@ -63,38 +91,86 @@ test("search machines by location, name, manufacturer or model (and all fields, 
   await page.screenshot({ path: "test-results/flow-search.png" });
 });
 
-test("a critical sub-machine with a major issue makes its parent inoperable; list, detail and dashboard agree", async ({ page }) => {
+test("sub-machines stay hidden until you expand their main component or search for them", async ({ page }) => {
   await signIn(page, "admin@schematichub.test");
-
   await page.goto("/machines");
-  await expect(page.getByRole("link", { name: "Register machine" })).toBeVisible(); // positive control: admins DO see it
-  const pressRow = rowFor(page, "Hydraulic Press 7");
-  await expect(pressRow).toContainText(/inoperable \(inherited\)/i);
-  const hpuRow = rowFor(page, "Hydraulic Power Unit HPU-7");
-  await expect(hpuRow).toContainText("critical");
-  await expect(hpuRow).toContainText("Hydraulic Press 7"); // "Part of"
-  await expect(rowFor(page, "Control Cabinet CC-7")).not.toContainText(/inoperable/i);
+  await expect(page.getByLabel("Search machines")).toHaveValue("");
 
-  await nameLink(page, "Hydraulic Press 7").click();
-  const banner = page.getByTestId("inoperable-banner");
-  await expect(banner).toContainText("Hydraulic Power Unit HPU-7");
-  await expect(banner).toContainText("clears automatically");
-  const subs = page.getByTestId("sub-machines");
-  await expect(subs).toContainText("Hydraulic Power Unit HPU-7");
-  await expect(subs).toContainText("Control Cabinet CC-7");
-  await page.screenshot({ path: "test-results/flow-inoperable.png" });
+  // top level only
+  await expect(rowFor(page, SYSTEM)).toBeVisible();
+  await expect(rowFor(page, UNIT)).toHaveCount(0);
+  await expect(rowFor(page, BOX)).toHaveCount(0);
+  await expect(rowFor(page, "Control Cabinet CC-7")).toHaveCount(0);
+  await expect(rowFor(page, "Hydraulic Press 7")).toBeVisible();
 
-  // the sub-machine shows the breadcrumb back to its system and is not itself inherited-inoperable
-  await subs.getByRole("link", { name: "Hydraulic Power Unit HPU-7" }).click();
-  await expect(page.getByRole("navigation", { name: "System hierarchy" })).toContainText("Hydraulic Press 7");
-  await expect(page.getByTestId("inoperable-banner")).toHaveCount(0);
-  await expect(page.getByTestId("causing-notice")).toContainText("Hydraulic Press 7"); // the cause says what it has taken down
+  // the collapsed parent says what is inside, and warns about faults it contains
+  const system = rowFor(page, SYSTEM);
+  await expect(system.getByTestId("hidden-count")).toContainText("2 sub-machines");
+  await expect(system.getByTestId("hidden-count")).toContainText("fault inside");
+  await expect(system).toContainText(/inoperable \(inherited\)/i);
 
-  await page.goto("/");
-  await expect(page.getByText("Inoperable machines")).toBeVisible();
+  // expand -> children appear (indented), collapse -> hidden again
+  const toggle = page.getByRole("button", { name: `Expand sub-machines of ${SYSTEM}` });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await expect(page.getByRole("button", { name: `Collapse sub-machines of ${SYSTEM}` })).toHaveAttribute("aria-expanded", "true");
+  await expect(rowFor(page, UNIT)).toBeVisible();
+  await expect(rowFor(page, BOX)).toBeVisible();
+  await expect(rowFor(page, UNIT)).toHaveAttribute("data-depth", "1");
+  await expect(rowFor(page, UNIT)).toContainText("critical");
+  await expect(rowFor(page, UNIT)).toContainText("major issue");
+  await expect(rowFor(page, BOX)).not.toContainText(/inoperable/i);
+  await page.screenshot({ path: "test-results/flow-tree-expanded.png" });
+  await page.getByRole("button", { name: `Collapse sub-machines of ${SYSTEM}` }).click();
+  await expect(rowFor(page, UNIT)).toHaveCount(0);
+
+  // expand all / collapse all
+  await page.getByRole("button", { name: "Expand all" }).click();
+  await expect(rowFor(page, UNIT)).toBeVisible();
+  await expect(rowFor(page, "Control Cabinet CC-7")).toBeVisible();
+  await page.getByRole("button", { name: "Collapse all" }).click();
+  await expect(rowFor(page, UNIT)).toHaveCount(0);
+
+  // searching shows sub-machines directly, with a "Part of" link
+  await search(page, "Hydraulic Unit", "name");
+  await expect(rowFor(page, UNIT)).toBeVisible();
+  await expect(rowFor(page, UNIT)).toContainText(SYSTEM);
+  await expect(page.getByRole("button", { name: /Expand sub-machines/ })).toHaveCount(0);
+
+  // the status filter understands the derived statuses
+  await page.goto("/machines?status=inoperable");
+  await expect(rowFor(page, SYSTEM)).toBeVisible();
+  await expect(rowFor(page, UNIT)).toHaveCount(0); // the unit itself is not inoperable, it is the cause
+  await page.goto("/machines?status=critical");
+  await expect(rowFor(page, SYSTEM)).toHaveCount(0); // nobody has a critical-severity issue in the fixture
 });
 
-test("create a sub-machine from its parent, mark it critical, raise a major issue, then resolve it", async ({ page }) => {
+test("status reflects a critical fault or an inherited one; detail page, list and dashboard agree", async ({ page }) => {
+  await signIn(page, "admin@schematichub.test");
+  await page.goto("/machines");
+  await expect(page.getByRole("link", { name: "Register machine" })).toBeVisible(); // positive control: admins DO see it
+
+  await nameLink(page, SYSTEM).click();
+  const banner = page.getByTestId("inoperable-banner");
+  await expect(banner).toContainText(UNIT);
+  await expect(banner).toContainText("clears automatically");
+  await expect(page.getByText(/inoperable \(inherited\)/i).first()).toBeVisible();
+  const subs = page.getByTestId("sub-machines");
+  await expect(subs).toContainText(UNIT);
+  await expect(subs).toContainText(BOX);
+
+  // the cause: HIGH issue on a critical component => not "critical fault" itself, but it names what it took down
+  await subs.getByRole("link", { name: UNIT }).click();
+  await expect(page.getByRole("navigation", { name: "System hierarchy" })).toContainText(SYSTEM);
+  await expect(page.getByTestId("inoperable-banner")).toHaveCount(0);
+  await expect(page.getByTestId("critical-banner")).toHaveCount(0);
+  await expect(page.getByTestId("causing-notice")).toContainText(SYSTEM);
+
+  await page.goto("/");
+  await expect(page.getByText("Machines in fault")).toBeVisible();
+});
+
+test("create a sub-machine, raise a CRITICAL issue: it shows 'critical fault' and its parent turns inoperable; resolving clears both", async ({ page }) => {
   await signIn(page, "admin@schematichub.test");
   const serial = `E2E-SUB-${Date.now()}`;
 
@@ -121,20 +197,31 @@ test("create a sub-machine from its parent, mark it critical, raise a major issu
 
   await expect(page.getByRole("heading", { name: "E2E Fan Motor" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "System hierarchy" })).toContainText("Cooling Tower CT-1");
+  await expect(page.getByTestId("critical-banner")).toHaveCount(0);
   const motorUrl = page.url();
 
-  // report a MAJOR issue on the critical sub-machine
+  // a CRITICAL issue on the critical sub-machine
   await page.getByLabel("Issue title").fill("E2E bearing seized");
-  await page.getByLabel("Severity").selectOption("high");
+  await page.getByLabel("Severity").selectOption("critical");
   await page.getByRole("button", { name: "Report issue" }).click();
   await expect(page.getByText("E2E bearing seized")).toBeVisible();
 
-  // parent is now inoperable and names the cause
+  // the machine itself now reads "critical fault"
+  await page.goto(motorUrl);
+  await expect(page.getByTestId("critical-banner")).toContainText("1 unresolved critical issue");
+  await expect(page.getByText("critical fault").first()).toBeVisible();
+  await search(page, "Fan Motor", "name");
+  await expect(rowFor(page, "E2E Fan Motor")).toContainText("critical fault");
+  await page.goto("/machines?status=critical");
+  await expect(rowFor(page, "E2E Fan Motor")).toBeVisible(); // filterable by the derived status
+
+  // and its parent is inoperable, naming the cause
   await page.goto("/machines");
   await nameLink(page, "Cooling Tower CT-1").click();
   await expect(page.getByTestId("inoperable-banner")).toContainText("E2E Fan Motor");
+  await page.screenshot({ path: "test-results/flow-inoperable.png" });
 
-  // a MINOR issue would not do this; resolving the major one clears the state
+  // resolving the issue clears both states
   await page.goto("/maintenance");
   const item = page.getByRole("listitem").filter({ hasText: "E2E bearing seized" });
   await item.getByRole("button", { name: "Resolve…" }).click();
@@ -147,13 +234,14 @@ test("create a sub-machine from its parent, mark it critical, raise a major issu
   await expect(page.getByTestId("inoperable-banner")).toHaveCount(0);
   await page.goto(motorUrl);
   await expect(page.getByRole("heading", { name: "E2E Fan Motor" })).toBeVisible();
+  await expect(page.getByTestId("critical-banner")).toHaveCount(0);
 });
 
-test("a read-only Viewer cannot see the add-sub-machine button", async ({ page }) => {
+test("a read-only Viewer cannot see the add-sub-machine button, and top-level machines are shown collapsed", async ({ page }) => {
   await signIn(page, "viewer@schematichub.test");
   await page.goto("/machines");
+  await expect(rowFor(page, "Hydraulic Press 7")).toBeVisible();
   await nameLink(page, "Hydraulic Press 7").click();
-  await expect(page.getByTestId("inoperable-banner")).toBeVisible(); // derived state is visible to everyone who can see the machine
   await expect(page.getByTestId("sub-machines")).toBeVisible();
   await expect(page.getByRole("link", { name: "Add sub-machine" })).toHaveCount(0);
   await expect(page.getByText("Add sub-machine")).toHaveCount(0);

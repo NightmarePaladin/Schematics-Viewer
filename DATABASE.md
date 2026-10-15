@@ -10,9 +10,10 @@ Migrations (apply in order) live in `supabase/migrations/`:
 6. `20261015000006_protect_admins.sql` — admins cannot lower their own role; an organization can never lose its last admin (trigger)
 7. `20261015000007_machine_hierarchy.sql` — `machines.parent_id` (composite FK, same organization), no self/loop parents, depth limit 10
 8. `20261015000008_critical_components.sql` — `machines.is_critical` and `inoperable_machines(org)` (derived inherited state)
+10. `20261015000010_critical_faults.sql` — `critical_fault_machines(org)`: machines with their own unresolved critical-severity issue (derived)
 9. `20261015000009_locations.sql` — `locations` table, `machines.location_id`, name-sync triggers, RLS, conversion of existing free-text locations
 
-> **Status:** all nine migrations were applied successfully to Supabase project `pmtdaopxvisqwyhaenvz` on 2026-10-15 (no SQL errors).
+> **Status:** all ten migrations were applied successfully to Supabase project `pmtdaopxvisqwyhaenvz` on 2026-10-15 (no SQL errors).
 > Supabase security advisor: 11 WARN `authenticated_security_definer_function_executable` — **intentional**: the RLS helper functions and the two RPCs
 > must be callable by signed-in users (the API calls `schematic_level` and the RPCs as the user); they only reveal the caller's own access.
 > Performance advisor: composite-FK indexes added in migration 4; remaining INFO "unused index" notices are expected on an empty database.
@@ -72,7 +73,8 @@ All helper functions are `SECURITY DEFINER` with `search_path = ''`, executable 
 - `machines.is_critical` marks a critical component. **Rule:** a critical machine with an unresolved issue of severity `high` or `critical` makes its parent inoperable;
   the effect continues to the grandparent only if the parent is itself critical. Nothing is stored: `inoperable_machines(p_org)` (SECURITY DEFINER, members only)
   derives it from open issues, so it clears the moment the issue is resolved (or downgraded to low/medium). It returns the cause machine's name only to callers who can view that machine.
-- The stored `status` field is untouched; the UI shows `effective status = inoperable (inherited)` when the function reports the machine.
+- The stored `status` field is untouched. **Effective status** (`src/lib/machine-status.ts`) = `critical` if `critical_fault_machines()` lists the machine (own unresolved critical-severity issue),
+  else `inoperable` if `inoperable_machines()` lists it (inherited), else the stored status; a `retired` machine stays retired. Both functions are SECURITY DEFINER, members-only, and read live issues, so nothing needs cleaning up on resolution.
 
 ## Locations
 - `locations(org_id, name, description, latitude, longitude)`: unique name per organization (case-insensitive); coordinates optional but both-or-neither and range-checked.

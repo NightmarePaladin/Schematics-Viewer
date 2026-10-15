@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, IssueStatusBadge, Page, PageHeader, SeverityBadge, fmtDate, one } from "@/components/ui-bits";
 import { requireOrgPage } from "@/lib/auth";
-import { loadInoperable } from "@/lib/machines";
+import { faultIds, loadFaults } from "@/lib/machines";
 import { ISSUE_SELECT } from "@/lib/selects";
 
 export const metadata = { title: "Dashboard" };
@@ -26,7 +26,7 @@ export default async function Dashboard() {
       .eq("org_id", s.orgId)
       .order("performed_at", { ascending: false })
       .limit(6),
-    loadInoperable(s, s.orgId),
+    loadFaults(s, s.orgId),
   ]);
 
   const stats = [
@@ -34,7 +34,7 @@ export default async function Dashboard() {
     { label: "Schematics", value: schematics, href: "/schematics" },
     { label: "Open issues", value: openIssues, href: "/maintenance" },
     { label: "Critical open", value: critical, href: "/maintenance?severity=critical" },
-    { label: "Inoperable machines", value: inop.size, href: "/machines" },
+    { label: "Machines in fault", value: faultIds(inop).size, href: "/machines?status=critical" },
   ];
 
   return (

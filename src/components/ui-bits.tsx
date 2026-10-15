@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { statusLabel } from "@/lib/machine-status";
 import { cn } from "@/lib/utils";
 
 export function PageHeader({
@@ -32,6 +33,7 @@ const MACHINE: Record<string, string> = {
   maintenance: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
   retired: "bg-muted text-muted-foreground",
   inoperable: "bg-red-600 text-white",
+  critical: "bg-red-800 text-white",
 };
 const SEVERITY: Record<string, string> = {
   low: "bg-muted text-muted-foreground",
@@ -45,10 +47,10 @@ const ISSUE: Record<string, string> = {
   resolved: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
 };
 
-const label = (v: string) => (v === "inoperable" ? "inoperable (inherited)" : v.replace("_", " "));
+const label = (v: string) => v.replace("_", " ");
 
 export const MachineStatusBadge = ({ status }: { status: string }) => (
-  <Badge variant="secondary" className={cn("capitalize", MACHINE[status])}>{label(status)}</Badge>
+  <Badge variant="secondary" className={cn("capitalize", MACHINE[status])}>{statusLabel(status)}</Badge>
 );
 export const SeverityBadge = ({ severity }: { severity: string }) => (
   <Badge variant="secondary" className={cn("capitalize", SEVERITY[severity])}>{severity}</Badge>

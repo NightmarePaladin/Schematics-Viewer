@@ -92,3 +92,15 @@ Request: premade locations with coordinates, picked from a dropdown. Built `loca
 | 32 | Existing free-text locations and coordinates would have been orphaned | migration converts them into location rows and links machines; machine coordinates that merely repeated the location's are cleared so they inherit |
 | 33 | **Styling bug:** outline-variant links ("Edit", "Add sub-machine", "Locations") showed no border — `buttonVariants()` used directly on a `<Link>` skips class merging, so base `border-transparent` beat `border-border` | `linkButton()` helper that merges classes; found by inspecting a screenshot and computed styles |
 Verified live: a machine at a location with coordinates shows real Open-Meteo temperature/humidity/wind with "from location …"; unit-tested geocoding failure modes; real geocoding request returns Chicago at ~41.9, -87.6.
+
+## Iteration 10 — derived "critical fault" status and collapsed sub-machines (2026-10-15)
+Requests: (a) a machine with a critical error, or one that inherits it, must show that in its status; (b) sub-parts should appear only when searched for or when their main component is expanded.
+Built: migration 10 (`critical_fault_machines`), a single `deriveStatus` rule used everywhere, status filter on effective status, `MachineTable` (collapsible tree vs flat search results), "fault inside" hint on collapsed parents, critical-fault banner, dashboard "Machines in fault".
+| # | Finding | Fix |
+|---|---------|-----|
+| 34 | **Tests coupled to demo data:** a user resolved the seeded "Pump P1 bearing failure" issue while trying the app, which (correctly) cleared the inherited state and broke 5 integration tests and the hierarchy E2E that assumed it stayed open | those suites now create their own fixtures (system -> critical component with an open high issue) and clean up; the user's resolution was left untouched |
+| 35 | A collapsed parent could hide a fault below it (e.g. a non-critical child with a critical issue does not change the parent's status) | collapsed rows show "N sub-machines" plus a red "fault inside" chip computed from all descendants |
+| 36 | Status filter used the stored column in SQL, so derived statuses could not be filtered | filter now applies to the effective status (page and API) |
+| 37 | `eslint .` started failing on a generated Playwright report bundle | build/test output directories added to the ESLint ignores |
+| 38 | **Flaky E2E under the dev server:** sign-in or the PDF load occasionally hung ("Please wait…", "Loading drawing…") after a production build had rewritten `.next`; Supabase and Vercel responded in <1 s | not an app defect: the full suite passes 18/18 against the production server (`next start`), which is now the recommended way to run E2E |
+Verified: 77 unit, 57 integration, 18 Playwright (production server) all pass; screenshots checked for the collapsed/expanded tree and the inherited-fault banner.

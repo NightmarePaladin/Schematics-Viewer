@@ -12,7 +12,15 @@ describe.skipIf(!hasSupabaseCreds())("machine hierarchy and critical components 
   let manager: SupabaseClient;
   let adminUser: SupabaseClient; // a real org member (the service-role client is not a member, so the function returns nothing for it)
   const tempMachines: string[] = [];
+  // Self-contained fixtures (the seeded demo issue may legitimately have been resolved by a user):
+  // fxPress (system) -> fxHpu (CRITICAL component with an open HIGH issue) and fxCabinet (not critical)
+  let fxPress = "";
+  let fxHpu = "";
+  let fxCabinet = "";
+  let fxHpuIssue = "";
+  const fxHpuName = `fx-hpu-${Date.now()}`;
   const tempIssues: string[] = [];
+  const stampNow = Date.now();
 
   const affected = async (client: SupabaseClient, org = s.orgId) => {
     const { data, error } = await client.rpc("inoperable_machines", { p_org: org });
@@ -50,6 +58,10 @@ describe.skipIf(!hasSupabaseCreds())("machine hierarchy and critical components 
     outsider = await userClient(USERS.outsider.email);
     manager = await userClient(USERS.manager.email);
     adminUser = await userClient(USERS.admin.email);
+    fxPress = await newMachine(`fx-press-${stampNow}`);
+    fxHpu = await newMachine(fxHpuName, { parent_id: fxPress, is_critical: true });
+    fxCabinet = await newMachine(`fx-cabinet-${stampNow}`, { parent_id: fxPress, is_critical: false });
+    fxHpuIssue = await newIssue(fxHpu, "high");
   });
 
   afterAll(async () => {
@@ -58,21 +70,21 @@ describe.skipIf(!hasSupabaseCreds())("machine hierarchy and critical components 
     for (const id of [...tempMachines].reverse()) await admin.from("machines").delete().eq("id", id);
   });
 
-  describe("seeded demo: critical HPU with an open high issue takes the press out of service", () => {
+  describe("a critical HPU with an open high issue takes its system out of service", () => {
     it("the press is inoperable because of the HPU; the non-critical cabinet is unaffected", async () => {
       const rows = await affected(manager);
-      const press = rows.filter((r) => r.machine_id === s.machines.press);
-      expect(press.map((r) => r.source_id)).toEqual([s.machines.hpu]);
-      expect(press[0].source_name).toBe("Hydraulic Power Unit HPU-7");
-      expect(ids(rows)).not.toContain(s.machines.cabinet);
-      expect(ids(rows)).not.toContain(s.machines.hpu);
+      const press = rows.filter((r) => r.machine_id === fxPress);
+      expect(press.map((r) => r.source_id)).toEqual([fxHpu]);
+      expect(press[0].source_name).toBe(fxHpuName);
+      expect(ids(rows)).not.toContain(fxCabinet);
+      expect(ids(rows)).not.toContain(fxHpu);
     });
 
     it("users who cannot see the failing sub-machine still see the parent as inoperable, but not the sub-machine's name", async () => {
       for (const who of [tech, viewer]) {
-        const press = (await affected(who)).find((r) => r.machine_id === s.machines.press);
+        const press = (await affected(who)).find((r) => r.machine_id === fxPress);
         expect(press).toBeDefined();
-        expect(press!.source_id).toBe(s.machines.hpu);
+        expect(press!.source_id).toBe(fxHpu);
         expect(press!.source_name).toBeNull();
       }
     });
@@ -84,28 +96,30 @@ describe.skipIf(!hasSupabaseCreds())("machine hierarchy and critical components 
 
   describe("derived state clears and returns with the issue", () => {
     it("resolving the issue clears the inherited state; reopening restores it; minor severity does not trigger it", async () => {
-      const { data: issue } = await admin.from("maintenance_issues").select("id, status, severity, resolution_note").eq("machine_id", s.machines.hpu).eq("title", "Pump P1 bearing failure").single();
+      const issue = { id: fxHpuIssue, status: "open", severity: "high", resolution_note: null as string | null };
       try {
-        await admin.from("maintenance_issues").update({ status: "resolved", resolution_note: "Bearing replaced" }).eq("id", issue!.id);
-        expect(ids(await affected(manager))).not.toContain(s.machines.press);
+        await admin.from("maintenance_issues").update({ status: "resolved", resolution_note: "Bearing replaced" }).eq("id", issue.id);
+        expect(ids(await affected(manager))).not.toContain(fxPress);
 
-        await admin.from("maintenance_issues").update({ status: "in_progress", resolution_note: null }).eq("id", issue!.id);
-        expect(ids(await affected(manager))).toContain(s.machines.press);
+        await admin.from("maintenance_issues").update({ status: "in_progress", resolution_note: null }).eq("id", issue.id);
+        expect(ids(await affected(manager))).toContain(fxPress);
 
-        await admin.from("maintenance_issues").update({ severity: "medium" }).eq("id", issue!.id);
-        expect(ids(await affected(manager))).not.toContain(s.machines.press);
+        await admin.from("maintenance_issues").update({ severity: "medium" }).eq("id", issue.id);
+        expect(ids(await affected(manager))).not.toContain(fxPress);
 
-        await admin.from("maintenance_issues").update({ severity: "critical" }).eq("id", issue!.id);
-        expect(ids(await affected(manager))).toContain(s.machines.press);
+        await admin.from("maintenance_issues").update({ severity: "critical" }).eq("id", issue.id);
+        expect(ids(await affected(manager))).toContain(fxPress);
       } finally {
-        await admin.from("maintenance_issues").update({ status: issue!.status, severity: issue!.severity, resolution_note: issue!.resolution_note }).eq("id", issue!.id);
+        await admin.from("maintenance_issues").update({ status: issue.status, severity: issue.severity, resolution_note: issue.resolution_note }).eq("id", issue.id);
       }
-      expect(ids(await affected(manager))).toContain(s.machines.press);
+      expect(ids(await affected(manager))).toContain(fxPress);
     });
 
     it("a major issue on a NON-critical child does not affect the parent", async () => {
-      const issue = await newIssue(s.machines.cabinet, "critical");
-      expect(ids(await affected(manager))).toEqual([s.machines.press]); // only the seeded HPU cause
+      const issue = await newIssue(fxCabinet, "critical");
+      const rows = await affected(manager);
+      expect(rows.filter((r) => r.source_id === fxCabinet)).toEqual([]);
+      expect(ids(rows)).toContain(fxPress); // still only because of the HPU
       await admin.from("maintenance_issues").delete().eq("id", issue);
     });
   });
@@ -130,6 +144,46 @@ describe.skipIf(!hasSupabaseCreds())("machine hierarchy and critical components 
     });
   });
 
+  describe("a machine's own critical-severity issue puts it in 'critical fault' (derived)", () => {
+    const faults = async (client: SupabaseClient) => {
+      const { data, error } = await client.rpc("critical_fault_machines", { p_org: s.orgId });
+      expect(error).toBeNull();
+      return new Map((data ?? []).map((r: { machine_id: string; issue_count: number }) => [r.machine_id, r.issue_count]));
+    };
+
+    it("only unresolved critical-severity issues count, and the state clears on resolution", async () => {
+      const m = await newMachine("fault-machine");
+      expect((await faults(manager)).has(m)).toBe(false);
+
+      await newIssue(m, "high"); // major, but not critical severity
+      await newIssue(m, "medium");
+      expect((await faults(manager)).has(m)).toBe(false);
+
+      const crit = await newIssue(m, "critical");
+      expect((await faults(manager)).get(m)).toBe(1);
+      const crit2 = await newIssue(m, "critical", "in_progress");
+      expect((await faults(manager)).get(m)).toBe(2);
+
+      await admin.from("maintenance_issues").update({ status: "resolved", resolution_note: "fixed" }).eq("id", crit);
+      expect((await faults(manager)).get(m)).toBe(1);
+      await admin.from("maintenance_issues").update({ status: "resolved", resolution_note: "fixed" }).eq("id", crit2);
+      expect((await faults(manager)).has(m)).toBe(false);
+    });
+
+    it("a critical component with only a HIGH issue is not in critical fault itself, but its parent is inoperable", async () => {
+      expect((await faults(manager)).has(fxHpu)).toBe(false);
+      expect(ids(await affected(manager))).toContain(fxPress);
+    });
+
+    it("is visible only to members of the organization", async () => {
+      const m = await newMachine("fault-visibility");
+      await newIssue(m, "critical");
+      const { data } = await outsider.rpc("critical_fault_machines", { p_org: s.orgId });
+      expect(data ?? []).toEqual([]);
+      expect((await faults(viewer)).has(m)).toBe(true);
+    });
+  });
+
   describe("hierarchy integrity", () => {
     it("rejects loops (A under B under A) and self-parenting", async () => {
       const a = await newMachine("loop-a");
@@ -141,7 +195,7 @@ describe.skipIf(!hasSupabaseCreds())("machine hierarchy and critical components 
     });
 
     it("rejects a parent from another organization", async () => {
-      const cross = await admin.from("machines").update({ parent_id: s.machines.press }).eq("id", s.otherMachineId);
+      const cross = await admin.from("machines").update({ parent_id: fxPress }).eq("id", s.otherMachineId);
       expect(cross.error?.code).toBe("23503");
     });
 
@@ -172,11 +226,11 @@ describe.skipIf(!hasSupabaseCreds())("machine hierarchy and critical components 
 
   describe("partial updates keep stored values", () => {
     it("is_critical and parent_id survive an update that only changes the name", async () => {
-      const { data: before } = await admin.from("machines").select("parent_id, is_critical, status").eq("id", s.machines.hpu).single();
-      await admin.from("machines").update({ description: "touched by test" }).eq("id", s.machines.hpu);
-      const { data: after } = await admin.from("machines").select("parent_id, is_critical, status").eq("id", s.machines.hpu).single();
+      const { data: before } = await admin.from("machines").select("parent_id, is_critical, status").eq("id", fxHpu).single();
+      await admin.from("machines").update({ description: "touched by test" }).eq("id", fxHpu);
+      const { data: after } = await admin.from("machines").select("parent_id, is_critical, status").eq("id", fxHpu).single();
       expect(after).toEqual(before);
-      await admin.from("machines").update({ description: null }).eq("id", s.machines.hpu);
+      await admin.from("machines").update({ description: null }).eq("id", fxHpu);
     });
   });
 });
