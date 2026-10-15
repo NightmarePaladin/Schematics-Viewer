@@ -1,0 +1,67 @@
+# Database
+
+Migrations (apply in order) live in `supabase/migrations/`:
+
+1. `20261015000001_schema.sql` — enums, 13 tables, constraints, indexes, triggers, new-user profile trigger
+2. `20261015000002_functions_rls.sql` — permission functions, RPCs, Row Level Security policies
+3. `20261015000003_storage.sql` — private `schematics` bucket + `storage.objects` policies
+4. `20261015000004_fk_indexes.sql` — covering indexes suggested by the performance advisor
+5. `20261015000005_machines_select_returning_fix.sql` — machines SELECT policy fix (INSERT … RETURNING)
+
+> **Status:** all five migrations were applied successfully to Supabase project `pmtdaopxvisqwyhaenvz` on 2026-10-15 (no SQL errors).
+> Supabase security advisor: 11 WARN `authenticated_security_definer_function_executable` — **intentional**: the RLS helper functions and the two RPCs
+> must be callable by signed-in users (the API calls `schematic_level` and the RPCs as the user); they only reveal the caller's own access.
+> Performance advisor: composite-FK indexes added in migration 4; remaining INFO "unused index" notices are expected on an empty database.
+
+## Tables
+
+| Table | Purpose / key constraints |
+|-------|---------------------------|
+| `organizations` | workspace |
+| `profiles` | 1:1 with `auth.users` (trigger-created); unique lower(email) |
+| `organization_memberships` | `(org_id, user_id)` unique; `role` enum admin/maintenance_manager/technician/viewer |
+| `groups` | unique `(org_id, lower(name))`; `unique(id, org_id)` for composite FKs |
+| `group_memberships` | PK `(group_id, user_id)`; FKs `(group_id, org_id)` and `(org_id, user_id)` ⇒ users can only join groups of their own org |
+| `machines` | required: name, category, manufacturer, model_number, serial_number; optional asset, description, location, lat/lon (both or neither), installed_on, status. **Unique `(org_id, lower(manufacturer), lower(serial_number))`** |
+| `schematics` | FK `(machine_id, org_id)`; title, document_number, revision, storage_path, file_size ≤ 25 MB, mime = application/pdf, uploaded_by; unique `(machine_id, document_number, revision)` |
+| `schematic_access_grants` | exactly one of `user_id`/`group_id`; level view/comment/edit/manage; partial unique indexes per grantee; composite FKs keep grantee in the same org |
+| `annotations` | `page_number ≥ 1`, type point/comment/box/callout, **x,y ∈ [0,1], width/height ∈ (0,1], x+width ≤ 1**, box/callout require size, body, optional status, author_id, timestamps |
+| `annotation_replies` | thread; `is_resolution_note`; FK `(annotation_id, org_id)` |
+| `maintenance_issues` | machine, optional schematic/annotation/page, title, description, status, severity, reporter, assignee, resolution_note, resolved_at (trigger) |
+| `maintenance_logs` | append-only history (no UPDATE/DELETE policy) |
+| `audit_events` | who did what (uploads, file views, grants, member changes…) |
+
+Timestamps default to `now()` on the server; `updated_at` is maintained by triggers. Creator attribution columns
+(`created_by`, `uploaded_by`, `author_id`, `reporter_id`, `performed_by`) are `NOT NULL`/`SET NULL`-safe and are checked against
+`auth.uid()` in the insert policies, so they cannot be forged. Deleting a schematic/annotation keeps issues and logs (`ON DELETE SET NULL`).
+
+## Functions
+
+- `schematic_level(schematic_id) → perm_level|null` — effective permission of `auth.uid()`; admin/manager ⇒ manage; else max(user grants, group grants); Viewer role capped at `view`; non-members ⇒ null.
+- `has_schematic_level(id, min)`, `can_view_machine(id)`, `org_role_of`, `is_org_member/admin/manager`, `can_write_org`, `annotation_schematic`, `storage_schematic_id(name)`.
+- RPC `create_organization(name)`, `add_member_by_email(org, email, role)` (Admin only).
+- Trigger `grant_uploader_manage` — uploader receives a Manage grant (default access is otherwise private).
+
+All helper functions are `SECURITY DEFINER` with `search_path = ''`, executable only by `authenticated`.
+
+## Row Level Security summary
+
+| Table | SELECT | INSERT | UPDATE | DELETE |
+|-------|--------|--------|--------|--------|
+| organizations | member | via RPC | admin | — |
+| profiles | self or shares an org | trigger | self | — |
+| memberships | member | via RPC | admin | admin or self |
+| groups / group_memberships | member | admin/manager | admin/manager | admin/manager |
+| machines | admin/manager, creator, or can view one of its schematics | admin/manager/technician (`created_by = uid`) | admin/manager or technician-creator | admin/manager |
+| schematics | level ≥ view | write role, uploader = uid, machine visible | level ≥ edit | level ≥ manage |
+| grants | level = manage, or own/group grant | level = manage | level = manage | level = manage |
+| annotations | level ≥ view | author = uid and level ≥ comment | level ≥ edit, or author with comment | level = manage, or author |
+| replies | via parent annotation view | author = uid and comment | author | author or manage |
+| issues | `can_view_machine` | reporter = uid, write role | manager, reporter, assignee | manager |
+| logs | `can_view_machine` | performed_by = uid, write role | — | — |
+| audit_events | admin/manager | member, actor = uid | — | — |
+| storage.objects (`schematics`) | view | edit + matching schematic row | — | manage |
+
+## Known modelling choices
+- Uploader trigger grant is created after the INSERT statement, so the API inserts the schematic without `RETURNING` and re-selects afterwards.
+- `maintenance_issues.annotation_id` is unique: one issue per annotation.

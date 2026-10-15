@@ -1,0 +1,48 @@
+# Testing
+
+**Rule:** nothing below is marked “passed” unless it was actually run. Last verified run: 2026-10-15 on Windows 11, Node 24.
+
+## Results
+
+Last verified run: 2026-10-15 (Windows 11, Node 24, Chrome stable via Playwright `channel: "chrome"`), against hosted Supabase project `pmtdaopxvisqwyhaenvz`.
+
+| Suite | Command | Result |
+|-------|---------|--------|
+| Type check | `npm run typecheck` | ✅ pass |
+| Lint | `npm run lint` | ✅ pass |
+| Production build | `npm run build` | ✅ pass (Next 16.4.1) |
+| Unit | `npm test` | ✅ **37 / 37** (4 files) |
+| Integration: live Open-Meteo | `npm run test:integration` | ✅ **2 / 2** — real HTTPS requests |
+| Integration: RLS / storage / schema (real Supabase) | `npm run test:integration` | ✅ **23 / 23** (25 total with the weather file) |
+| Playwright E2E | `npm run e2e` | ✅ **2 / 2** (the 8-step flow in two serial tests) |
+
+Caveats: E2E and integration runs write rows to the dev project (each E2E run leaves one "E2E Test Pump" machine, schematic and annotation).
+Not covered by automated tests: direct HTTP tests of every route, mobile layout, pan/draw-box/callout interactions, rotation in the browser (math is unit-tested), email-confirmation sign-up flow.
+
+## Coverage map (requirement → test)
+
+| Required test | Where | Status |
+|---------------|-------|--------|
+| Normalized annotation coordinates | `tests/unit/coords.test.ts` (zoom independence, rotation round trips, fit scale), `schemas.test.ts` (rejects pixel values) | ✅ run |
+| Annotation persistence & retrieval | `tests/integration/rls.test.ts` “annotation persistence + retrieval”; E2E steps 5–7 | ✅ run |
+| Machine metadata validation | `tests/unit/schemas.test.ts`; DB uniqueness in `rls.test.ts` | ✅ run |
+| Cross-organization access denial | `rls.test.ts` “cross-organization denial”; `permissions.test.ts` (non-member ⇒ null) | ✅ run |
+| Group-based schematic permissions | `permissions.test.ts`; `rls.test.ts` “group + individual grants” | ✅ run |
+| Viewer read-only | `permissions.test.ts` (cap); `rls.test.ts` “viewer is read-only”; E2E step 8 | ✅ run |
+| Unauthorized PDF download denial | `rls.test.ts` “PDF storage access” (outsider, ungranted technician, private bucket, viewer upload/delete) | ✅ run |
+| External API failure handling | `tests/unit/weather.test.ts` (no location, HTTP 503, network error, timeout, malformed body, cache) | ✅ run |
+
+Playwright flow (`e2e/annotation-flow.spec.ts`): sign in → create machine → upload sample PDF → open schematic → pin annotation →
+reload → verify normalized position **and** rendered pixel position (also after zooming) → sign in as Viewer, verify the private
+schematic is 404, the shared one is read-only, and direct API writes are refused.
+
+## How to run the credential-dependent tests
+
+1. Apply all five migrations in `supabase/migrations/` (README → Supabase setup). For a throw-away project, disable "Confirm email".
+2. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`.
+3. `npm run seed` (idempotent).
+4. `npm run test:integration` — 25 tests (23 RLS/storage + 2 weather).
+5. `npm run e2e` — uses installed Chrome (`E2E_CHANNEL=chrome`, default). To use Playwright's bundled Chromium run `npx playwright install chromium` and set `E2E_CHANNEL=chromium`.
+   Set `E2E_BASE_URL` to test a deployed URL instead of starting `npm run dev`.
+
+Use a dedicated/dev project: the suites write and delete rows and temporarily change one grant (restored in `finally`).

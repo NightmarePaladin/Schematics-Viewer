@@ -1,0 +1,150 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { LogForm, IssueForm } from "@/components/maintenance-forms";
+import { UploadForm } from "@/components/upload-form";
+import { WeatherPanel } from "@/components/weather-panel";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Empty, IssueStatusBadge, MachineStatusBadge, Page, PageHeader, SeverityBadge, fmtDate, one } from "@/components/ui-bits";
+import { requireOrg } from "@/lib/auth";
+import { canCreateMachine, canManageMachines, canUploadSchematic, canWriteMaintenance } from "@/lib/permissions";
+import { ISSUE_SELECT } from "@/lib/selects";
+import { z } from "zod";
+
+export const metadata = { title: "Machine" };
+
+export default async function MachineDetail({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  if (!z.string().uuid().safeParse(id).success) notFound();
+  const s = await requireOrg();
+  const { data: m } = await s.supabase.from("machines").select("*").eq("id", id).eq("org_id", s.orgId).maybeSingle();
+  if (!m) notFound();
+
+  const [schematics, issues, logs] = await Promise.all([
+    s.supabase
+      .from("schematics")
+      .select("id, title, document_number, revision, created_at, uploader:profiles!schematics_uploaded_by_fkey(display_name)")
+      .eq("machine_id", id)
+      .order("created_at", { ascending: false }),
+    s.supabase.from("maintenance_issues").select(ISSUE_SELECT).eq("machine_id", id).order("created_at", { ascending: false }),
+    s.supabase
+      .from("maintenance_logs")
+      .select("id, body, entry_type, performed_at, performer:profiles!maintenance_logs_performed_by_fkey(display_name)")
+      .eq("machine_id", id)
+      .order("performed_at", { ascending: false }),
+  ]);
+
+  const canEdit = canManageMachines(s.role) || (canCreateMachine(s.role) && m.created_by === s.user.id);
+  const meta: [string, string | null][] = [
+    ["Category", m.category], ["Manufacturer", m.manufacturer], ["Model", m.model_number], ["Serial number", m.serial_number],
+    ["Asset number", m.asset_number], ["Location", m.location], ["Installed", m.installed_on ? fmtDate(m.installed_on) : null],
+    ["Coordinates", m.latitude != null ? `${m.latitude}, ${m.longitude}` : null],
+  ];
+
+  return (
+    <Page>
+      <PageHeader
+        title={m.name}
+        description={m.description ?? undefined}
+        actions={
+          <>
+            <MachineStatusBadge status={m.status} />
+            {canEdit && <Button variant="outline" nativeButton={false} render={<Link href={`/machines/${id}/edit`} />}>Edit</Button>}
+          </>
+        }
+      />
+      <div className="mb-4 grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader><CardTitle>Details</CardTitle></CardHeader>
+          <CardContent>
+            <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+              {meta.map(([k, v]) => (
+                <div key={k}><dt className="text-xs text-muted-foreground">{k}</dt><dd className="font-medium">{v || "—"}</dd></div>
+              ))}
+            </dl>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Weather context</CardTitle></CardHeader>
+          <CardContent><WeatherPanel machineId={id} hasLocation={m.latitude != null && m.longitude != null} /></CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader><CardTitle>Schematics</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            {schematics.data?.length ? (
+              <ul className="divide-y rounded-lg border">
+                {schematics.data.map((sc) => (
+                  <li key={sc.id} className="flex items-center justify-between gap-2 p-3 text-sm">
+                    <div className="min-w-0">
+                      <Link href={`/schematics/${sc.id}`} className="font-medium hover:underline">{sc.title}</Link>
+                      <div className="text-xs text-muted-foreground">{sc.document_number} · Rev {sc.revision} · {one(sc.uploader)?.display_name} · {fmtDate(sc.created_at)}</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <Empty>No schematics you can view for this machine.</Empty>
+            )}
+            {canUploadSchematic(s.role) && (
+              <details className="rounded-lg border p-3">
+                <summary className="cursor-pointer text-sm font-medium">Upload a schematic</summary>
+                <div className="mt-3"><UploadForm machineId={id} /></div>
+              </details>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Issues</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            {issues.data?.length ? (
+              <ul className="divide-y rounded-lg border">
+                {issues.data.map((i) => (
+                  <li key={i.id} className="p-3 text-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-medium">{i.title}</span>
+                      <span className="flex shrink-0 gap-1"><SeverityBadge severity={i.severity} /><IssueStatusBadge status={i.status} /></span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {one(i.reporter)?.display_name} · {fmtDate(i.created_at)}
+                      {i.schematic_id && (<> · <Link className="underline" href={`/schematics/${i.schematic_id}${i.page_number ? `?page=${i.page_number}` : ""}`}>{one(i.schematic)?.title ?? "schematic"} p.{i.page_number}</Link></>)}
+                    </div>
+                    {i.resolution_note && <div className="mt-1 text-xs">Resolution: {i.resolution_note}</div>}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <Empty>No issues reported.</Empty>
+            )}
+            {canWriteMaintenance(s.role) && <IssueForm machineId={id} />}
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader><CardTitle>Maintenance history</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            {canWriteMaintenance(s.role) && <LogForm machineId={id} />}
+            {logs.data?.length ? (
+              <ol className="space-y-2">
+                {logs.data.map((l) => (
+                  <li key={l.id} className="rounded-lg border p-3 text-sm">
+                    <div className="flex justify-between gap-2 text-xs text-muted-foreground">
+                      <span className="capitalize">{l.entry_type} · {one(l.performer)?.display_name}</span>
+                      <time dateTime={l.performed_at}>{fmtDate(l.performed_at, true)}</time>
+                    </div>
+                    <p className="mt-1 whitespace-pre-wrap">{l.body}</p>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <Empty>No maintenance history yet.</Empty>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </Page>
+  );
+}
