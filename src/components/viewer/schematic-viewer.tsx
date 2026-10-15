@@ -176,7 +176,7 @@ export function SchematicViewer(props: ViewerProps) {
         <Button size="icon-sm" variant="ghost" aria-label={showAnn ? "Hide annotations" : "Show annotations"} aria-pressed={showAnn} data-testid="toggle-annotations" onClick={() => setShowAnn((v) => !v)}>
           {showAnn ? <Eye /> : <EyeOff />}
         </Button>
-        <Button size="icon-sm" variant="ghost" className="ml-auto" aria-label={sidebar ? "Collapse sidebar" : "Expand sidebar"} onClick={() => setSidebar((v) => !v)}>
+        <Button size="icon-sm" variant="ghost" className="ml-auto" aria-label={sidebar ? "Collapse annotations panel" : "Expand annotations panel"} onClick={() => setSidebar((v) => !v)}>
           {sidebar ? <PanelRightClose /> : <PanelRightOpen />}
         </Button>
       </div>

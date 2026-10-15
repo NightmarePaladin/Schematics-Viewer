@@ -14,10 +14,16 @@ Last verified run: 2026-10-15 (Windows 11, Node 24, Chrome stable via Playwright
 | Unit | `npm test` | ✅ **37 / 37** (4 files) |
 | Integration: live Open-Meteo | `npm run test:integration` | ✅ **2 / 2** — real HTTPS requests |
 | Integration: RLS / storage / schema (real Supabase) | `npm run test:integration` | ✅ **23 / 23** (25 total with the weather file) |
-| Playwright E2E | `npm run e2e` | ✅ **2 / 2** (the 8-step flow in two serial tests) |
+| Playwright E2E | `npm run e2e` | ✅ **8 / 8** — 2 core-flow tests + 6 viewer-flow tests (below) |
 
-Caveats: E2E and integration runs write rows to the dev project (each E2E run leaves one "E2E Test Pump" machine, schematic and annotation).
-Not covered by automated tests: direct HTTP tests of every route, mobile layout, pan/draw-box/callout interactions, rotation in the browser (math is unit-tested), email-confirmation sign-up flow.
+E2E specs clean up the rows they create (`e2e/cleanup.ts`, service-role key); a full run leaves the database at its seed state (verified by row counts).
+Not covered by automated tests: direct HTTP tests of every route, mobile layout, the pan tool (drag to scroll), email-confirmation sign-up flow, upload rejection paths (non-PDF, >25 MB) in the browser.
+
+`e2e/viewer-flows.spec.ts` covers: drawing an issue box by dragging and a callout; thread reply; creating a maintenance issue from an annotation;
+resolving it (button disabled until a note is typed; log entry written); granting and revoking a group's access in the Access tab with a second
+browser session confirming 200 → 404; live weather panel (real Open-Meteo) and the no-coordinates note; weather failure fallback with Retry;
+90° view rotation keeps the seeded box on the same drawing feature (and 360° returns to the start); page navigation, fit-to-page/width, zoom,
+annotation visibility toggle and annotations-panel collapse for a read-only user.
 
 ## Coverage map (requirement → test)
 

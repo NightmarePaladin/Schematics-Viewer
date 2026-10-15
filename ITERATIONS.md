@@ -51,3 +51,14 @@ No entry claims a defect was found by a test that has not run (see TESTING.md).
 
 Lesson recorded: the 22 passing database tests had not exercised the most basic write path through the real API; only the end-to-end test did.
 Added 3 tests (machine insert-returning, machine metadata visibility, technician cannot edit another's machine) → 25 integration tests, all passing.
+
+## Iteration 6 — UI click-through as automated tests (2026-10-15)
+Wrote `e2e/viewer-flows.spec.ts` for the flows not yet exercised and inspected screenshots of the results.
+| # | Finding | Fix |
+|---|---------|-----|
+| 18 | Two buttons shared the accessible name "Collapse sidebar" (app nav and annotations panel) — ambiguous for screen-reader and test users | viewer button renamed "Collapse/Expand annotations panel" |
+| 19 | Toast notifications covered the reply input in the thread panel | toasts moved to top-right |
+| 20 | Repeated E2E runs accumulated annotations/machines in the demo data | `e2e/cleanup.ts` run in `afterAll`; leftovers from earlier runs removed; row counts confirmed back to seed state |
+| 21 | Four of my own test assertions were too loose (ambiguous text/label matches) | tightened; no application defect behind them |
+Result: box/callout drawing, thread replies, issue create/resolve, grants (grant → 200, revoke → 404 for the group member), live weather, weather failure fallback, rotation and viewer controls all work as designed. Visual check of screenshots: markers follow the drawing under rotation.
+Known cosmetic item: the seeded sample box sits next to, not over, the relief valve on the demo drawing.

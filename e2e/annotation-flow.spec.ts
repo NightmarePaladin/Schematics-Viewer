@@ -1,6 +1,7 @@
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import dotenv from "dotenv";
+import { cleanupE2eData } from "./cleanup";
 
 dotenv.config({ path: ".env.local" });
 
@@ -21,6 +22,7 @@ async function waitForCanvas(page: Page) {
 }
 
 test.describe.configure({ mode: "serial" });
+test.afterAll(async () => { await cleanupE2eData(); });
 test.skip(!configured, "Supabase env vars not set — see TESTING.md");
 
 let schematicUrl = "";

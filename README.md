@@ -16,7 +16,7 @@ maintenance records to exact coordinates on a drawing page.
 | 2 | Persistent database | Supabase PostgreSQL: 13 tables, FKs, indexes, RLS, triggers — `supabase/migrations/*.sql`, described in [DATABASE.md](DATABASE.md). Private Storage bucket for PDFs. |
 | 3 | Real external API | Open-Meteo weather, requested server-side by `src/lib/weather.ts` via `GET /api/weather`. 5 s timeout, 10 min cache, fallback states. Verified by a live-network test (`tests/integration/weather-live.test.ts`). |
 | 4 | New technology / novel use case | PDF.js rendering with an SVG annotation layer using **normalized, rotation-aware page coordinates** (`src/lib/coords.ts`); RLS-enforced document ACL with user + group grants resolved in SQL and mirrored in storage policies; signed-URL-only delivery. |
-| 5 | Iterate and test | Unit tests (37), live-network test (2), RLS/storage integration tests (23), Playwright E2E (2), and a candid change log in [ITERATIONS.md](ITERATIONS.md). Results in [TESTING.md](TESTING.md). |
+| 5 | Iterate and test | Unit tests (37), live-network test (2), RLS/storage integration tests (23), Playwright E2E (8), and a candid change log in [ITERATIONS.md](ITERATIONS.md). Results in [TESTING.md](TESTING.md). |
 
 ## Quick start
 

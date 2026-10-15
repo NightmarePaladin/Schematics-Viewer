@@ -9,9 +9,9 @@ _Last updated: 2026-10-15._
 | 1 Scaffold + structure | ✅ done | build, dev server |
 | 2 Supabase schema, auth, storage | ✅ applied (5 migrations), advisors reviewed | MCP apply + advisors; 23 RLS/storage tests |
 | 3 Machines + PDF upload | ✅ works end to end | Playwright (create machine, upload PDF) |
-| 4 Viewer + annotations | ✅ point annotation works: persists, reload + zoom keep position | Playwright |
-| 5 Issues + roles/groups/grants | ✅ permissions verified in DB and for the Viewer role in the UI; ⚠️ issue/log/grant **UI flows** not clicked through by an automated test | RLS tests, Playwright step 8 |
-| 6 Open-Meteo | ✅ verified against the real API; ⚠️ weather panel on a machine page not yet checked in a browser | live tests |
+| 4 Viewer + annotations | ✅ point/box/callout, threads, rotation, zoom/fit, toggle | Playwright (8 tests) |
+| 5 Issues + roles/groups/grants | ✅ verified in DB and in the UI (create/resolve issue, grant/revoke) | RLS tests, Playwright |
+| 6 Open-Meteo | ✅ real API + weather panel in browser + failure fallback | live tests, Playwright |
 | 7 Tests, docs, deploy prep | ✅ docs + suites run (see TESTING.md); Vercel deploy not done | — |
 
 ## What was decided
@@ -21,12 +21,12 @@ _Last updated: 2026-10-15._
 - Vercel link deferred by the user until GitHub + Supabase are working.
 
 ## Next steps
-1. Manually click through: draw a box/callout, reply in a thread, create an issue from an annotation and resolve it, grant a group access in the Access tab, view weather on the seeded "Outdoor Compressor C2" page, rotate the view and confirm markers stay put.
-2. `git init`, add the GitHub remote, commit, push (nothing is committed yet). Then connect Vercel (README → Deploying) and add the Vercel URL to Supabase redirect URLs.
-3. Optional cleanup of E2E leftovers: delete machines named "E2E Test Pump" from the dev project.
+1. Connect Vercel (README → Deploying): add `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`, then add the Vercel URL to Supabase Auth redirect URLs. Run `E2E_BASE_URL=<url> npm run e2e` against it.
+2. Mobile-width pass (sidebar overlay) and the pan tool are the remaining un-automated UI paths.
+3. Consider direct-to-storage uploads before relying on >4.5 MB PDFs on Vercel Hobby.
 
 ## Known limitations / unfinished
-- Not yet checked in a browser: pan, box/callout drawing, rotation, mobile sidebar overlay, issue/grant UI flows.
+- Not yet checked in a browser: pan tool, mobile-width layout.
 - Uploads pass through a Route Handler → Vercel Hobby body limit ≈ 4.5 MB. Use direct signed uploads for large PDFs.
 - Only PDF is supported (extensible via `UPLOAD_HANDLERS`).
 - Issue list has no pagination; annotations load all pages at once (fine for MVP sizes).
