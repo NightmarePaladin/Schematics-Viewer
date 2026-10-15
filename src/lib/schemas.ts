@@ -22,7 +22,8 @@ export const SEVERITIES = ["low", "medium", "high", "critical"] as const;
 export const ANNOTATION_TYPES = ["point", "comment", "box", "callout"] as const;
 export const LOG_TYPES = ["inspection", "repair", "calibration", "note"] as const;
 
-const machineBase = z.object({
+/** Fields without defaults: safe to `.partial()` for updates (a default would silently overwrite stored values). */
+const machineFields = z.object({
   name: trimmed(120),
   category: trimmed(80),
   manufacturer: trimmed(120),
@@ -38,7 +39,11 @@ const machineBase = z.object({
       (v) => (v === "" || v === undefined ? null : v),
       z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD").nullable(),
     ),
-  status: z.enum(MACHINE_STATUSES).default("operational"),
+  status: z.enum(MACHINE_STATUSES),
+  /** Optional parent system/machine this one is a sub-part of. */
+  parent_id: z.preprocess((v) => (v === "" || v === undefined ? null : v), z.string().uuid().nullable()),
+  /** Critical component: a major unresolved issue here makes the parent inoperable until resolved. */
+  is_critical: z.boolean(),
 });
 
 const latLonPair = (m: { latitude: number | null; longitude: number | null }, ctx: z.RefinementCtx) => {
@@ -51,8 +56,14 @@ const latLonPair = (m: { latitude: number | null; longitude: number | null }, ct
   }
 };
 
-export const machineCreateSchema = machineBase.superRefine(latLonPair);
-export const machineUpdateSchema = machineBase.partial().superRefine((m, ctx) => {
+export const machineCreateSchema = machineFields
+  .extend({
+    status: machineFields.shape.status.default("operational"),
+    is_critical: machineFields.shape.is_critical.default(false),
+  })
+  .superRefine(latLonPair);
+
+export const machineUpdateSchema = machineFields.partial().superRefine((m, ctx) => {
   if ((m.latitude === undefined) !== (m.longitude === undefined)) {
     ctx.addIssue({ code: "custom", path: ["latitude"], message: "Send latitude and longitude together" });
     return;
@@ -62,6 +73,9 @@ export const machineUpdateSchema = machineBase.partial().superRefine((m, ctx) =>
     ctx,
   );
 });
+
+/** "Major" issues: unresolved issues with these severities take a critical component's parent out of service. */
+export const MAJOR_SEVERITIES = ["high", "critical"] as const;
 
 export const MAX_PDF_BYTES = 25 * 1024 * 1024;
 

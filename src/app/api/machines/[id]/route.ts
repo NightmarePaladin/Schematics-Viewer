@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ApiError, fromDbError, handler, notFound, parseBody } from "@/lib/api";
 import { audit, requireOrg } from "@/lib/auth";
+import { assertParentVisible, effectiveStatus, loadInoperable } from "@/lib/machines";
 import { machineUpdateSchema } from "@/lib/schemas";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -18,7 +19,11 @@ async function loadMachine(s: Awaited<ReturnType<typeof requireOrg>>, id: string
 export const GET = handler<Ctx>(async (_req, ctx) => {
   const s = await requireOrg();
   const { id } = await ctx.params;
-  return NextResponse.json({ data: await loadMachine(s, id) });
+  const m = await loadMachine(s, id);
+  const inop = await loadInoperable(s, s.orgId);
+  return NextResponse.json({
+    data: { ...m, effective_status: effectiveStatus(m.status, inop.has(id)), inoperable_because: inop.get(id) ?? [] },
+  });
 });
 
 export const PATCH = handler<Ctx>(async (req, ctx) => {
@@ -26,6 +31,7 @@ export const PATCH = handler<Ctx>(async (req, ctx) => {
   const { id } = await ctx.params;
   await loadMachine(s, id);
   const patch = await parseBody(req, machineUpdateSchema);
+  if (patch.parent_id !== undefined) await assertParentVisible(s, s.orgId, patch.parent_id);
   // RLS update policy decides whether this caller may edit; 0 rows back means denied.
   const { data, error } = await s.supabase.from("machines").update(patch).eq("id", id).select().maybeSingle();
   if (error) throw fromDbError(error);

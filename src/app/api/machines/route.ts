@@ -2,31 +2,35 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { check, forbidden, handler, parseBody, parseQuery } from "@/lib/api";
 import { audit, requireOrg } from "@/lib/auth";
+import { assertParentVisible, effectiveStatus, loadInoperable } from "@/lib/machines";
 import { canCreateMachine } from "@/lib/permissions";
+import { applyMachineSearch, SEARCH_FIELDS } from "@/lib/machine-search";
 import { MACHINE_STATUSES, machineCreateSchema } from "@/lib/schemas";
 
 const listQuery = z.object({
   q: z.string().trim().max(100).optional(),
+  field: z.enum(Object.keys(SEARCH_FIELDS) as [keyof typeof SEARCH_FIELDS, ...(keyof typeof SEARCH_FIELDS)[]]).default("all"),
   status: z.enum(MACHINE_STATUSES).optional(),
   category: z.string().trim().max(80).optional(),
 });
 
-/** GET /api/machines?q=&status=&category= — RLS limits results to machines the caller may view. */
+/** GET /api/machines?q=&field=all|name|manufacturer|model|location&status=&category= — RLS limits results to machines the caller may view. */
 export const GET = handler(async (req) => {
   const s = await requireOrg();
-  const { q, status, category } = parseQuery(req, listQuery);
+  const { q, field, status, category } = parseQuery(req, listQuery);
   let query = s.supabase.from("machines").select("*").eq("org_id", s.orgId).order("name");
   if (status) query = query.eq("status", status);
   if (category) query = query.eq("category", category);
-  if (q) {
-    const term = q.replace(/[%,()]/g, " ");
-    query = query.or(
-      ["name", "manufacturer", "model_number", "serial_number", "asset_number", "location"]
-        .map((c) => `${c}.ilike.%${term}%`)
-        .join(","),
-    );
-  }
-  return NextResponse.json({ data: check(await query) });
+  query = applyMachineSearch(query, q, field);
+  const rows = check(await query);
+  const inop = await loadInoperable(s, s.orgId);
+  return NextResponse.json({
+    data: rows.map((m) => ({
+      ...m,
+      effective_status: effectiveStatus(m.status, inop.has(m.id)),
+      inoperable_because: inop.get(m.id) ?? [],
+    })),
+  });
 });
 
 /** POST /api/machines — org id comes from the verified session, never from the request body. */
@@ -34,6 +38,7 @@ export const POST = handler(async (req) => {
   const s = await requireOrg();
   if (!canCreateMachine(s.role)) throw forbidden("Your role cannot register machines.");
   const input = await parseBody(req, machineCreateSchema);
+  await assertParentVisible(s, s.orgId, input.parent_id);
   const row = check(
     await s.supabase
       .from("machines")

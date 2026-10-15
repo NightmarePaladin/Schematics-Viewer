@@ -22,6 +22,13 @@ _Last updated: 2026-10-15._
 - Still to do by the project owner in Supabase **Authentication → URL Configuration**: Site URL = the Vercel URL; add `https://schematics-viewer.vercel.app/**` (and the preview pattern) to Redirect URLs. Password sign-in works without it; confirmation emails need it.
 - Vercel "Vercel Authentication" (SSO) is enabled on deployments: visitors need a Vercel login until it is disabled in Project Settings → Deployment Protection (owner's decision).
 
+## Latest additions
+- Machine search by location/name/manufacturer/model/all (multi-word). Machine hierarchy (`parent_id`) and critical components (`is_critical`) with derived inherited-inoperable state.
+  Rule: critical child + unresolved **high/critical** issue ⇒ parent inoperable, propagating only through critical parents; clears automatically on resolution.
+- Demo data: Hydraulic Press 7 is **inoperable (inherited)** by default because its critical HPU has an open high issue; resolve "Pump P1 bearing failure" to see it clear (re-run `npm run seed` only re-creates it if missing).
+- Decision to confirm with the project owner: "major" = severity high **or** critical (constant `MAJOR_SEVERITIES`; SQL function `inoperable_machines`).
+- Open item for the project owner: enable **leaked password protection** in Supabase Auth settings (advisor warning).
+
 ## What was decided
 - User chose a hosted Supabase project (ref `pmtdaopxvisqwyhaenvz`, from their MCP link) but then asked to **build the site first** and set up
   `.env.local` themselves. Migrations 1-4 were applied on 2026-10-15 with the user's approval; no rows have been written yet (seed not run).

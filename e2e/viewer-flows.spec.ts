@@ -119,7 +119,7 @@ test("manager grants a group access in the Access tab; group member then opens t
 test("weather panel shows live Open-Meteo data for an outdoor machine and a fallback for an indoor one", async ({ page }) => {
   await signIn(page, "admin@schematichub.test");
   await page.goto("/machines");
-  await page.getByRole("link", { name: "Outdoor Compressor C2" }).click();
+  await page.locator("td:first-child a", { hasText: /^Outdoor Compressor C2$/ }).click();
   await expect(page.getByText(/°C/)).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText(/Humidity/)).toBeVisible();
   await expect(page.getByText(/km\/h/)).toBeVisible();
@@ -127,7 +127,7 @@ test("weather panel shows live Open-Meteo data for an outdoor machine and a fall
   await page.screenshot({ path: "test-results/flow-weather.png" });
 
   await page.goto("/machines");
-  await page.getByRole("link", { name: "Hydraulic Press 7" }).click();
+  await page.locator("td:first-child a", { hasText: /^Hydraulic Press 7$/ }).click();
   await expect(page.getByText(/No coordinates on file/)).toBeVisible();
 });
 
@@ -137,7 +137,7 @@ test("weather API failure shows a retryable fallback", async ({ page }) => {
     r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: false, reason: "timeout", message: "Weather service timed out. Try again shortly." }) }),
   );
   await page.goto("/machines");
-  await page.getByRole("link", { name: "Outdoor Compressor C2" }).click();
+  await page.locator("td:first-child a", { hasText: /^Outdoor Compressor C2$/ }).click();
   await expect(page.getByText("Weather service timed out")).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
 });

@@ -69,3 +69,16 @@ Known cosmetic item: the seeded sample box sits next to, not over, the relief va
 | 22 | Options in dropdown boxes were impossible to read (dark mode) | native `<select>` popups ignore the transparent background used by the styled control; light text on a light popup | explicit `background`/`color` for `select`/`option` plus `color-scheme`; verified computed colors in a dark-mode browser run |
 | 23 | **Security/logic bug:** an Admin could lower their own role (account bob@bob.com ended up as Maintenance Manager, leaving the organization with **zero admins**) | `add_member_by_email` upserted any role for any email, including the caller's own; nothing protected the last admin | migration 6: admins cannot lower their own role (RPC + RLS WITH CHECK), and a trigger refuses to demote or delete an organization's last admin; API returns 403/409 with a clear message; affected account restored to Admin |
 Lesson: the original RLS tests covered *who can read/write data* but not *can a privileged user damage their own access*. Added 5 regression tests (own-role lowering via RPC and direct update, last-admin removal/demotion, normal role changes still work, a second admin may step down). Integration suite is now 30 tests (28 RLS/storage/schema + 2 live weather), all passing.
+
+## Iteration 8 — search, machine hierarchy, critical components (2026-10-15)
+User requests: search by location/name/manufacturer/model; link machines as sub-parts of a system; critical sub-machines make the parent inoperable while a major issue is open.
+Built: shared search module + "Search in" selector; migrations 7-8; parent/critical UI; derived `inoperable_machines()`; dashboard stat; demo data (critical HPU with an open high issue under the press).
+| # | Finding | Fix |
+|---|---------|-----|
+| 24 | **Latent bug found while extending the schema:** `machineUpdateSchema = base.partial()` kept Zod `.default()` values, so an API `PATCH {name}` would silently reset `status` (and now `is_critical`/`parent_id`) | defaults moved out of the shared field set; update schema has none; regression unit test (`PATCH {name}` parses to exactly `{name}`) and DB test |
+| 25 | **Accessibility + vacuous test:** Base UI renders `<Button render={<Link/>}>` as `<a role="button">`, so links were announced as buttons and my earlier "Viewer has no Register machine *link*" assertion could never fail | real `<Link className={buttonVariants()}>` elements; absence assertions now paired with positive controls |
+| 26 | Integration test premise wrong: a technician cannot see the HPU, so the cause's name is (correctly) masked | tests assert masking for tech/viewer and the name for a manager |
+| 27 | Service-role client is not an org member so `inoperable_machines` returns nothing for it (by design) | tests use a real member client |
+| 28 | Several E2E locators became ambiguous once child rows repeated the parent's name | locators scoped to the name column |
+| 29 | The failing component itself still read "Operational" with nothing marking it as the cause | "major issue" marker in list/sub-machine list and a notice on its own page naming what it has taken down |
+Supabase security advisor: still only the intentional SECURITY DEFINER warnings (12, incl. `inoperable_machines`) plus **leaked-password protection disabled** (an Auth dashboard setting for the project owner).

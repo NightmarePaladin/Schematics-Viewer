@@ -62,7 +62,7 @@ export interface SeedResult {
   orgId: string;
   otherOrgId: string;
   groupId: string;
-  machines: { press: string; compressor: string; tower: string };
+  machines: { press: string; compressor: string; tower: string; hpu: string; cabinet: string };
   otherMachineId: string;
   schematicId: string;
   privateSchematicId: string;
@@ -134,6 +134,11 @@ export async function seed(): Promise<SeedResult> {
     compressor: await ensureMachine(admin, { ...common, name: "Outdoor Compressor C2", category: "Compressor", manufacturer: "AirMaster", model_number: "AM-220", serial_number: "AM-77310", location: "Yard North", latitude: 41.8781, longitude: -87.6298, installed_on: "2021-05-14", status: "degraded", description: "Rooftop screw compressor exposed to weather." }),
     tower: await ensureMachine(admin, { ...common, name: "Cooling Tower CT-1", category: "Cooling", manufacturer: "AirMaster", model_number: "CT-900", serial_number: "CT-00031", location: "Plant 1 roof", latitude: 41.8827, longitude: -87.6233, status: "operational" }),
   };
+  // Hierarchy demo: the press is a system; the HPU is a CRITICAL component, the cabinet is not.
+  const hpu = await ensureMachine(admin, { ...common, name: "Hydraulic Power Unit HPU-7", category: "Hydraulics", manufacturer: "Forgeworks", model_number: "HPU-90", serial_number: "FW-HPU-7", location: "Plant 1 / Bay 3", status: "operational", parent_id: machines.press, is_critical: true });
+  const cabinet = await ensureMachine(admin, { ...common, name: "Control Cabinet CC-7", category: "Controls", manufacturer: "Forgeworks", model_number: "CC-12", serial_number: "FW-CC-7", location: "Plant 1 / Bay 3", status: "operational", parent_id: machines.press, is_critical: false });
+  await admin.from("machines").update({ parent_id: machines.press, is_critical: true }).eq("id", hpu);
+  await admin.from("machines").update({ parent_id: machines.press, is_critical: false }).eq("id", cabinet);
   const otherMachineId = await ensureMachine(admin, { org_id: otherOrgId, created_by: ids.outsider, name: "Other Corp Boiler", category: "Boiler", manufacturer: "AirMaster", model_number: "B-1", serial_number: "AM-77310", status: "operational" });
 
   const pdf = await readFile(path.join(process.cwd(), "samples", "demo-hydraulic-schematic.pdf"));
@@ -170,5 +175,13 @@ export async function seed(): Promise<SeedResult> {
     ]);
   }
 
-  return { ids, orgId, otherOrgId, groupId: groupId!, machines, otherMachineId, schematicId, privateSchematicId };
+  const { count: hpuIssues } = await admin.from("maintenance_issues").select("id", { count: "exact", head: true }).eq("machine_id", hpu);
+  if (!hpuIssues) {
+    await admin.from("maintenance_issues").insert({
+      org_id: orgId, machine_id: hpu, title: "Pump P1 bearing failure", description: "Bearing noise and metal in the filter. Unit must not run.",
+      severity: "high", reporter_id: ids.tech, assignee_id: ids.tech2,
+    });
+  }
+
+  return { ids, orgId, otherOrgId, groupId: groupId!, machines: { ...machines, hpu, cabinet }, otherMachineId, schematicId, privateSchematicId };
 }

@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { selectClass } from "@/components/ui-bits";
 import { MACHINE_STATUSES } from "@/lib/schemas";
 
-type Machine = Record<string, string | number | null>;
+type Machine = Record<string, string | number | boolean | null>;
+export interface ParentOption { id: string; name: string; serial_number: string }
 type FieldErrors = Record<string, string>;
 
 const FIELDS: { name: string; label: string; required?: boolean; type?: string; hint?: string }[] = [
@@ -25,7 +26,8 @@ const FIELDS: { name: string; label: string; required?: boolean; type?: string; 
   { name: "longitude", label: "Longitude", type: "number" },
 ];
 
-export function MachineForm({ machine }: { machine?: Machine }) {
+export function MachineForm({ machine, parents = [], defaultParentId = null }: { machine?: Machine; parents?: ParentOption[]; defaultParentId?: string | null }) {
+  const [hasParent, setHasParent] = useState(Boolean(machine?.parent_id ?? defaultParentId));
   const router = useRouter();
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -39,10 +41,11 @@ export function MachineForm({ machine }: { machine?: Machine }) {
     const form = new FormData(e.currentTarget);
     const payload: Record<string, FormDataEntryValue> = {};
     for (const [k, v] of form.entries()) payload[k] = v;
+    const requestBody = { ...payload, is_critical: form.get("is_critical") === "on" };
     const res = await fetch(machine ? `/api/machines/${machine.id}` : "/api/machines", {
       method: machine ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(requestBody),
     });
     const body = await res.json().catch(() => null);
     if (!res.ok) {
@@ -93,6 +96,32 @@ export function MachineForm({ machine }: { machine?: Machine }) {
           </select>
         </div>
       </div>
+      <fieldset className="space-y-3 rounded-lg border p-3">
+        <legend className="px-1 text-sm font-medium">System hierarchy</legend>
+        <div className="space-y-1.5">
+          <Label htmlFor="parent_id">Part of (parent system or machine)</Label>
+          <select
+            id="parent_id"
+            name="parent_id"
+            defaultValue={(machine?.parent_id as string) ?? defaultParentId ?? ""}
+            onChange={(e) => setHasParent(Boolean(e.target.value))}
+            className={selectClass}
+          >
+            <option value="">None — top-level machine or system</option>
+            {parents.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.serial_number})</option>)}
+          </select>
+        </div>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="is_critical" defaultChecked={Boolean(machine?.is_critical)} disabled={!hasParent} className="mt-1" />
+          <span>
+            <span className="font-medium">Critical component</span>
+            <span className="block text-xs text-muted-foreground">
+              If this machine has an unresolved <strong>high or critical</strong> issue, its parent is treated as <strong>inoperable</strong> until the issue is resolved.
+              {!hasParent && " Choose a parent first."}
+            </span>
+          </span>
+        </label>
+      </fieldset>
       <div className="space-y-1.5">
         <Label htmlFor="description">Description</Label>
         <Textarea id="description" name="description" rows={3} defaultValue={(machine?.description as string) ?? ""} />

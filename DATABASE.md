@@ -8,8 +8,10 @@ Migrations (apply in order) live in `supabase/migrations/`:
 4. `20261015000004_fk_indexes.sql` — covering indexes suggested by the performance advisor
 5. `20261015000005_machines_select_returning_fix.sql` — machines SELECT policy fix (INSERT … RETURNING)
 6. `20261015000006_protect_admins.sql` — admins cannot lower their own role; an organization can never lose its last admin (trigger)
+7. `20261015000007_machine_hierarchy.sql` — `machines.parent_id` (composite FK, same organization), no self/loop parents, depth limit 10
+8. `20261015000008_critical_components.sql` — `machines.is_critical` and `inoperable_machines(org)` (derived inherited state)
 
-> **Status:** all six migrations were applied successfully to Supabase project `pmtdaopxvisqwyhaenvz` on 2026-10-15 (no SQL errors).
+> **Status:** all eight migrations were applied successfully to Supabase project `pmtdaopxvisqwyhaenvz` on 2026-10-15 (no SQL errors).
 > Supabase security advisor: 11 WARN `authenticated_security_definer_function_executable` — **intentional**: the RLS helper functions and the two RPCs
 > must be callable by signed-in users (the API calls `schematic_level` and the RPCs as the user); they only reveal the caller's own access.
 > Performance advisor: composite-FK indexes added in migration 4; remaining INFO "unused index" notices are expected on an empty database.
@@ -62,6 +64,14 @@ All helper functions are `SECURITY DEFINER` with `search_path = ''`, executable 
 | logs | `can_view_machine` | performed_by = uid, write role | — | — |
 | audit_events | admin/manager | member, actor = uid | — | — |
 | storage.objects (`schematics`) | view | edit + matching schematic row | — | manage |
+
+## Machine hierarchy and critical components
+- `machines.parent_id` links a machine to the system/machine it is a part of (tree, single parent). FK `(parent_id, org_id)` keeps both in one organization;
+  `ON DELETE SET NULL (parent_id)` un-links children when a parent is deleted. Trigger `check_machine_hierarchy` rejects loops (A under B under A) and depth > 10.
+- `machines.is_critical` marks a critical component. **Rule:** a critical machine with an unresolved issue of severity `high` or `critical` makes its parent inoperable;
+  the effect continues to the grandparent only if the parent is itself critical. Nothing is stored: `inoperable_machines(p_org)` (SECURITY DEFINER, members only)
+  derives it from open issues, so it clears the moment the issue is resolved (or downgraded to low/medium). It returns the cause machine's name only to callers who can view that machine.
+- The stored `status` field is untouched; the UI shows `effective status = inoperable (inherited)` when the function reports the machine.
 
 ## Known modelling choices
 - Uploader trigger grant is created after the INSERT statement, so the API inserts the schematic without `RETURNING` and re-selects afterwards.

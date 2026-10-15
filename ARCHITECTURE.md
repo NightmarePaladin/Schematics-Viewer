@@ -64,7 +64,7 @@ group memberships and annotations impossible at the schema level.
 | `/api/organizations` | POST, PUT | create org (Admin) via RPC; switch active org (validated) |
 | `/api/members` | GET, POST | Admin adds registered user by email via RPC |
 | `/api/groups`, `/api/groups/[id]/members` | GET, POST / POST, DELETE | managers |
-| `/api/machines`, `/api/machines/[id]` | GET, POST / GET, PATCH, DELETE | search/filter; serial unique per org+manufacturer → 409 |
+| `/api/machines`, `/api/machines/[id]` | GET, POST / GET, PATCH, DELETE | `?q=&field=all\|name\|manufacturer\|model\|location&status=&category=`; serial unique per org+manufacturer → 409; `parent_id`, `is_critical`; responses include `effective_status` + `inoperable_because` |
 | `/api/schematics` | GET, POST (multipart) | type/magic-byte/size validation; private by default |
 | `/api/schematics/[id]` | GET, PATCH, DELETE | metadata; delete needs Manage |
 | `/api/schematics/[id]/file` | GET | 60 s signed URL after permission check; audited |
@@ -76,6 +76,11 @@ group memberships and annotations impossible at the schema level.
 | `/api/weather?machine_id=` | GET | authz → Open-Meteo → `{ok, …}` or `{ok:false, reason}` |
 
 Errors share one shape: `{ "error": { "code", "message", "details?" } }` with 400/401/403/404/409/413/415/422/502/503.
+
+## Machine search and hierarchy
+- `src/lib/machine-search.ts` is shared by the Machines page and `GET /api/machines`: every word must match (case-insensitive, partial) at least one column of the chosen field group.
+- `src/lib/machine-tree.ts` holds pure tree helpers (ancestors, descendants, cycle check) plus a TypeScript mirror of the SQL inheritance rule for unit tests.
+- `src/lib/machines.ts` loads the derived inoperable state through the `inoperable_machines` RPC and validates that a chosen parent is visible to the caller.
 
 ## Extensibility
 - **More file types:** add an entry to `UPLOAD_HANDLERS` in `src/app/api/schematics/route.ts` and to `ACCEPTED` in `upload-form.tsx`;

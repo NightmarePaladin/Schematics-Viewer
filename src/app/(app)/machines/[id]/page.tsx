@@ -3,10 +3,12 @@ import { notFound } from "next/navigation";
 import { LogForm, IssueForm } from "@/components/maintenance-forms";
 import { UploadForm } from "@/components/upload-form";
 import { WeatherPanel } from "@/components/weather-panel";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, IssueStatusBadge, MachineStatusBadge, Page, PageHeader, SeverityBadge, fmtDate, one } from "@/components/ui-bits";
 import { requireOrg } from "@/lib/auth";
+import { ancestorsOf, childrenOf } from "@/lib/machine-tree";
+import { causeIds, effectiveStatus, loadInoperable } from "@/lib/machines";
 import { canCreateMachine, canManageMachines, canUploadSchematic, canWriteMaintenance } from "@/lib/permissions";
 import { ISSUE_SELECT } from "@/lib/selects";
 import { z } from "zod";
@@ -20,6 +22,15 @@ export default async function MachineDetail({ params }: { params: Promise<{ id: 
   const { data: m } = await s.supabase.from("machines").select("*").eq("id", id).eq("org_id", s.orgId).maybeSingle();
   if (!m) notFound();
 
+  const [{ data: tree }, inop] = await Promise.all([
+    s.supabase.from("machines").select("id, name, parent_id, is_critical, status, serial_number").eq("org_id", s.orgId).order("name"),
+    loadInoperable(s, s.orgId),
+  ]);
+  const trail = ancestorsOf(tree ?? [], id).reverse();
+  const subs = childrenOf(tree ?? [], id);
+  const causes = inop.get(id) ?? [];
+  const causing = causeIds(inop);
+  const takenDown = (tree ?? []).filter((n) => inop.get(n.id)?.some((x) => x.id === id));
   const [schematics, issues, logs] = await Promise.all([
     s.supabase
       .from("schematics")
@@ -39,17 +50,46 @@ export default async function MachineDetail({ params }: { params: Promise<{ id: 
     ["Category", m.category], ["Manufacturer", m.manufacturer], ["Model", m.model_number], ["Serial number", m.serial_number],
     ["Asset number", m.asset_number], ["Location", m.location], ["Installed", m.installed_on ? fmtDate(m.installed_on) : null],
     ["Coordinates", m.latitude != null ? `${m.latitude}, ${m.longitude}` : null],
+    ["Critical component", m.is_critical ? "Yes: a major issue here makes its parent inoperable" : "No"],
   ];
 
   return (
     <Page>
+      {trail.length > 0 && (
+        <nav aria-label="System hierarchy" className="mb-2 flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
+          {trail.map((a) => (
+            <span key={a.id} className="flex items-center gap-1"><Link className="hover:underline" href={`/machines/${a.id}`}>{a.name}</Link><span aria-hidden>/</span></span>
+          ))}
+          <span className="font-medium text-foreground">{m.name}</span>
+        </nav>
+      )}
+      {causes.length > 0 && (
+        <div role="alert" data-testid="inoperable-banner" className="mb-4 rounded-lg border border-red-500/50 bg-red-500/10 p-3 text-sm">
+          <p className="font-semibold text-red-700 dark:text-red-300">Inoperable — inherited from a critical sub-machine</p>
+          <p className="text-muted-foreground">
+            {causes.map((c, i) => (
+              <span key={c.id}>{i > 0 && ", "}{c.name ? <Link className="underline" href={`/machines/${c.id}`}>{c.name}</Link> : "a restricted sub-machine"}</span>
+            ))}{" "}
+            {causes.length === 1 ? "has" : "have"} an unresolved high or critical issue. This clears automatically when that issue is resolved.
+          </p>
+        </div>
+      )}
+      {causing.has(id) && (
+        <div role="status" data-testid="causing-notice" className="mb-4 rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+          <p className="font-semibold text-amber-800 dark:text-amber-300">Critical component with an unresolved major issue</p>
+          <p className="text-muted-foreground">
+            Until it is resolved, {takenDown.length > 0 ? takenDown.map((n, i) => (<span key={n.id}>{i > 0 && ", "}<Link className="underline" href={`/machines/${n.id}`}>{n.name}</Link></span>)) : "its parent system"}{" "}
+            {takenDown.length === 1 ? "is" : "are"} treated as inoperable.
+          </p>
+        </div>
+      )}
       <PageHeader
         title={m.name}
         description={m.description ?? undefined}
         actions={
           <>
-            <MachineStatusBadge status={m.status} />
-            {canEdit && <Button variant="outline" nativeButton={false} render={<Link href={`/machines/${id}/edit`} />}>Edit</Button>}
+            <MachineStatusBadge status={effectiveStatus(m.status, causes.length > 0)} />
+            {canEdit && <Link href={`/machines/${id}/edit`} className={buttonVariants({ variant: "outline" })}>Edit</Link>}
           </>
         }
       />
@@ -69,6 +109,29 @@ export default async function MachineDetail({ params }: { params: Promise<{ id: 
           <CardContent><WeatherPanel machineId={id} hasLocation={m.latitude != null && m.longitude != null} /></CardContent>
         </Card>
       </div>
+
+      <Card className="mb-4" data-testid="sub-machines">
+        <CardHeader><CardTitle>Sub-machines</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {subs.length ? (
+            <ul className="divide-y rounded-lg border">
+              {subs.map((c) => (
+                <li key={c.id} className="flex items-center justify-between gap-2 p-3 text-sm">
+                  <span>
+                    <Link href={`/machines/${c.id}`} className="font-medium hover:underline">{c.name}</Link>
+                    <span className="ml-2 font-mono text-xs text-muted-foreground">{c.serial_number}</span>
+                    {c.is_critical && <span className="ml-2 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800 dark:text-amber-300">critical</span>}
+                  </span>
+                  <span className="flex items-center gap-1">{causing.has(c.id) && <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-700 dark:text-red-300">major issue</span>}<MachineStatusBadge status={effectiveStatus(c.status, inop.has(c.id))} /></span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Empty>No sub-machines. Link machines here to model a system and its parts.</Empty>
+          )}
+          {canCreateMachine(s.role) && <Link href={`/machines/new?parent=${id}`} className={buttonVariants({ variant: "outline", size: "sm" })}>Add sub-machine</Link>}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

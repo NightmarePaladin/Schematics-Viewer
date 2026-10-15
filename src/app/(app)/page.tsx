@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, IssueStatusBadge, Page, PageHeader, SeverityBadge, fmtDate, one } from "@/components/ui-bits";
 import { requireOrg } from "@/lib/auth";
+import { loadInoperable } from "@/lib/machines";
 import { ISSUE_SELECT } from "@/lib/selects";
 
 export const metadata = { title: "Dashboard" };
@@ -13,7 +14,7 @@ export default async function Dashboard() {
     if (f) q = f(q);
     return (await q).count ?? 0;
   };
-  const [machines, schematics, openIssues, critical, issues, logs] = await Promise.all([
+  const [machines, schematics, openIssues, critical, issues, logs, inop] = await Promise.all([
     count("machines"),
     count("schematics"),
     count("maintenance_issues", (q) => q.neq("status", "resolved")),
@@ -25,6 +26,7 @@ export default async function Dashboard() {
       .eq("org_id", s.orgId)
       .order("performed_at", { ascending: false })
       .limit(6),
+    loadInoperable(s, s.orgId),
   ]);
 
   const stats = [
@@ -32,12 +34,13 @@ export default async function Dashboard() {
     { label: "Schematics", value: schematics, href: "/schematics" },
     { label: "Open issues", value: openIssues, href: "/maintenance" },
     { label: "Critical open", value: critical, href: "/maintenance?severity=critical" },
+    { label: "Inoperable machines", value: inop.size, href: "/machines" },
   ];
 
   return (
     <Page>
       <PageHeader title="Dashboard" description="What you can see across your organization." />
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {stats.map((st) => (
           <Link key={st.label} href={st.href}>
             <Card className="transition-colors hover:bg-muted/50">

@@ -16,7 +16,7 @@ maintenance records to exact coordinates on a drawing page.
 | 2 | Persistent database | Supabase PostgreSQL: 13 tables, FKs, indexes, RLS, triggers — `supabase/migrations/*.sql`, described in [DATABASE.md](DATABASE.md). Private Storage bucket for PDFs. |
 | 3 | Real external API | Open-Meteo weather, requested server-side by `src/lib/weather.ts` via `GET /api/weather`. 5 s timeout, 10 min cache, fallback states. Verified by a live-network test (`tests/integration/weather-live.test.ts`). |
 | 4 | New technology / novel use case | PDF.js rendering with an SVG annotation layer using **normalized, rotation-aware page coordinates** (`src/lib/coords.ts`); RLS-enforced document ACL with user + group grants resolved in SQL and mirrored in storage policies; signed-URL-only delivery. |
-| 5 | Iterate and test | Unit tests (37), live-network test (2), RLS/storage integration tests (28), Playwright E2E (8), and a candid change log in [ITERATIONS.md](ITERATIONS.md). Results in [TESTING.md](TESTING.md). |
+| 5 | Iterate and test | Unit tests (57), live-network test (2), RLS/storage/hierarchy integration tests (39), Playwright E2E (12), and a candid change log in [ITERATIONS.md](ITERATIONS.md). Results in [TESTING.md](TESTING.md). |
 
 ## Quick start
 
@@ -33,12 +33,12 @@ Without `.env.local` the app still starts and shows a `/setup` page explaining w
 1. Create a project at <https://supabase.com> (or use an existing one).
 2. **Project Settings → API**: copy the project URL and the `anon`/publishable key into `.env.local`
    (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`).
-3. Apply the migrations **in order (6 files)** — either paste each file into **SQL Editor → Run**, or with the CLI:
+3. Apply the migrations **in order (8 files)** — either paste each file into **SQL Editor → Run**, or with the CLI:
    ```bash
    npx supabase link --project-ref <your-ref>
    npx supabase db push
    ```
-   Files: `20261015000001_schema.sql`, `20261015000002_functions_rls.sql`, `20261015000003_storage.sql`, `20261015000004_fk_indexes.sql`, `20261015000005_machines_select_returning_fix.sql`, `20261015000006_protect_admins.sql`.
+   Files: `20261015000001_schema.sql`, `20261015000002_functions_rls.sql`, `20261015000003_storage.sql`, `20261015000004_fk_indexes.sql`, `20261015000005_machines_select_returning_fix.sql`, `20261015000006_protect_admins.sql`, `20261015000007_machine_hierarchy.sql`, `20261015000008_critical_components.sql`.
 4. **Authentication → Providers → Email**: for quick local demos turn **off** “Confirm email” (otherwise new users must
    click an emailed link first). **Authentication → URL Configuration**: add `http://localhost:3000/**` and your Vercel URL
    as redirect URLs.
@@ -58,6 +58,10 @@ Without `.env.local` the app still starts and shows a `/setup` page explaining w
 3. In the viewer, open the **Access** tab to grant View/Comment/Edit/Manage to people or groups (Teams page creates groups).
 4. Pick a tool (point, comment, issue box, callout), click/drag on the drawing, write a note, save. Click a marker to open its thread, reply, set status, or create a maintenance issue.
 5. Add coordinates (latitude/longitude) to a machine to see live weather context on its page.
+6. **Search** machines on the Machines page by location, name, manufacturer, model (or all fields incl. serial/asset); several words must all match.
+7. **Systems and sub-machines:** when registering/editing a machine pick *Part of* (parent). Tick **Critical component** on a sub-machine: while it has an
+   unresolved **high or critical** issue, its parent is shown as **Inoperable (inherited)** (list, detail, dashboard) until the issue is resolved.
+   The state is computed live, never stored, and continues upward only through parents that are themselves marked critical.
 
 ### Commands
 
