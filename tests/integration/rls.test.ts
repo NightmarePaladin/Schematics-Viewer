@@ -57,6 +57,46 @@ describe.skipIf(!hasSupabaseCreds())("RLS + storage (real Supabase)", () => {
     });
   });
 
+  describe("admin role protection (regression: admin lowered own role)", () => {
+    const roleOf = async (org: string, user: string) =>
+      (await admin.from("organization_memberships").select("role").eq("org_id", org).eq("user_id", user).single()).data?.role;
+
+    it("an admin cannot lower their own role through add_member_by_email", async () => {
+      const res = await c.admin.rpc("add_member_by_email", { p_org: s.orgId, p_email: USERS.admin.email, p_role: "technician" });
+      expect(res.error?.code).toBe("42501");
+      expect(await roleOf(s.orgId, s.ids.admin)).toBe("admin");
+    });
+
+    it("an admin cannot lower their own role with a direct update", async () => {
+      const res = await c.admin.from("organization_memberships").update({ role: "viewer" }).eq("org_id", s.orgId).eq("user_id", s.ids.admin).select();
+      expect(res.error !== null || (res.data ?? []).length === 0).toBe(true);
+      expect(await roleOf(s.orgId, s.ids.admin)).toBe("admin");
+    });
+
+    it("the last admin of an organization cannot be removed or demoted, even by the database owner path", async () => {
+      const del = await c.outsider.from("organization_memberships").delete().eq("org_id", s.otherOrgId).eq("user_id", s.ids.outsider).select();
+      expect(del.error !== null || (del.data ?? []).length === 0).toBe(true);
+      const demote = await admin.from("organization_memberships").update({ role: "viewer" }).eq("org_id", s.otherOrgId).eq("user_id", s.ids.outsider);
+      expect(demote.error?.code).toBe("P0001");
+      expect(await roleOf(s.otherOrgId, s.ids.outsider)).toBe("admin");
+    });
+
+    it("an admin can still change another member's role", async () => {
+      const up = await c.admin.rpc("add_member_by_email", { p_org: s.orgId, p_email: USERS.tech2.email, p_role: "maintenance_manager" });
+      expect(up.error).toBeNull();
+      expect(await roleOf(s.orgId, s.ids.tech2)).toBe("maintenance_manager");
+      await admin.from("organization_memberships").update({ role: "technician" }).eq("org_id", s.orgId).eq("user_id", s.ids.tech2);
+      expect(await roleOf(s.orgId, s.ids.tech2)).toBe("technician");
+    });
+
+    it("a second admin may step down only because another admin remains", async () => {
+      await admin.from("organization_memberships").update({ role: "admin" }).eq("org_id", s.orgId).eq("user_id", s.ids.manager);
+      const down = await admin.from("organization_memberships").update({ role: "maintenance_manager" }).eq("org_id", s.orgId).eq("user_id", s.ids.manager);
+      expect(down.error).toBeNull();
+      expect(await roleOf(s.orgId, s.ids.manager)).toBe("maintenance_manager");
+    });
+  });
+
   describe("machine registry access", () => {
     it("a technician can insert a machine and get the row back (regression: INSERT ... RETURNING under RLS)", async () => {
       const serial = `RET-${Date.now()}`;

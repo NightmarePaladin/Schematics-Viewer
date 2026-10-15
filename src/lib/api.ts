@@ -33,6 +33,8 @@ export function fromDbError(err: PgLikeError, fallbackMsg = "Database request fa
     case "22P02":
     case "22003":
       return new ApiError(422, "invalid_value", err.message ?? "A value is out of range.");
+    case "P0001":
+      return new ApiError(409, "conflict", err.message ?? "That change is not allowed.");
     case "42501":
       return new ApiError(403, "forbidden", "You do not have permission to do that.");
     case "PGRST116":

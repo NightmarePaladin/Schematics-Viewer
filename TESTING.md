@@ -13,7 +13,7 @@ Last verified run: 2026-10-15 (Windows 11, Node 24, Chrome stable via Playwright
 | Production build | `npm run build` | ✅ pass (Next 16.4.1) |
 | Unit | `npm test` | ✅ **37 / 37** (4 files) |
 | Integration: live Open-Meteo | `npm run test:integration` | ✅ **2 / 2** — real HTTPS requests |
-| Integration: RLS / storage / schema (real Supabase) | `npm run test:integration` | ✅ **23 / 23** (25 total with the weather file) |
+| Integration: RLS / storage / schema (real Supabase) | `npm run test:integration` | ✅ **28 / 28** (30 total with the weather file) |
 | Playwright E2E | `npm run e2e` | ✅ **8 / 8** — 2 core-flow tests + 6 viewer-flow tests (below) |
 
 E2E specs clean up the rows they create (`e2e/cleanup.ts`, service-role key); a full run leaves the database at its seed state (verified by row counts).
@@ -44,10 +44,10 @@ schematic is 404, the shared one is read-only, and direct API writes are refused
 
 ## How to run the credential-dependent tests
 
-1. Apply all five migrations in `supabase/migrations/` (README → Supabase setup). For a throw-away project, disable "Confirm email".
+1. Apply all six migrations in `supabase/migrations/` (README → Supabase setup). For a throw-away project, disable "Confirm email".
 2. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`.
 3. `npm run seed` (idempotent).
-4. `npm run test:integration` — 25 tests (23 RLS/storage + 2 weather).
+4. `npm run test:integration` — 30 tests (28 RLS/storage/schema + 2 weather).
 5. `npm run e2e` — uses installed Chrome (`E2E_CHANNEL=chrome`, default). To use Playwright's bundled Chromium run `npx playwright install chromium` and set `E2E_CHANNEL=chromium`.
    Set `E2E_BASE_URL` to test a deployed URL instead of starting `npm run dev`.
 

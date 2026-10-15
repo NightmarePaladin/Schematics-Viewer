@@ -27,6 +27,7 @@ export const POST = handler(async (req) => {
   });
   if (error) {
     if (error.code === "P0002") return NextResponse.json({ error: { code: "user_not_found", message: error.message } }, { status: 404 });
+    if (error.code === "42501") return NextResponse.json({ error: { code: "forbidden", message: error.message } }, { status: 403 });
     throw fromDbError(error);
   }
   await audit(s, s.orgId, "member.add", "membership", data as string, { role: body.role });

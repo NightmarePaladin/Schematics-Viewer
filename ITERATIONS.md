@@ -62,3 +62,10 @@ Wrote `e2e/viewer-flows.spec.ts` for the flows not yet exercised and inspected s
 | 21 | Four of my own test assertions were too loose (ambiguous text/label matches) | tightened; no application defect behind them |
 Result: box/callout drawing, thread replies, issue create/resolve, grants (grant → 200, revoke → 404 for the group member), live weather, weather failure fallback, rotation and viewer controls all work as designed. Visual check of screenshots: markers follow the drawing under rotation.
 Known cosmetic item: the seeded sample box sits next to, not over, the relief valve on the demo drawing.
+
+## Iteration 7 — user-reported defects (2026-10-15)
+| # | Report | Root cause | Fix |
+|---|--------|-----------|-----|
+| 22 | Options in dropdown boxes were impossible to read (dark mode) | native `<select>` popups ignore the transparent background used by the styled control; light text on a light popup | explicit `background`/`color` for `select`/`option` plus `color-scheme`; verified computed colors in a dark-mode browser run |
+| 23 | **Security/logic bug:** an Admin could lower their own role (account bob@bob.com ended up as Maintenance Manager, leaving the organization with **zero admins**) | `add_member_by_email` upserted any role for any email, including the caller's own; nothing protected the last admin | migration 6: admins cannot lower their own role (RPC + RLS WITH CHECK), and a trigger refuses to demote or delete an organization's last admin; API returns 403/409 with a clear message; affected account restored to Admin |
+Lesson: the original RLS tests covered *who can read/write data* but not *can a privileged user damage their own access*. Added 5 regression tests (own-role lowering via RPC and direct update, last-admin removal/demotion, normal role changes still work, a second admin may step down). Integration suite is now 30 tests (28 RLS/storage/schema + 2 live weather), all passing.

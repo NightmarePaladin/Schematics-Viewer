@@ -7,8 +7,9 @@ Migrations (apply in order) live in `supabase/migrations/`:
 3. `20261015000003_storage.sql` — private `schematics` bucket + `storage.objects` policies
 4. `20261015000004_fk_indexes.sql` — covering indexes suggested by the performance advisor
 5. `20261015000005_machines_select_returning_fix.sql` — machines SELECT policy fix (INSERT … RETURNING)
+6. `20261015000006_protect_admins.sql` — admins cannot lower their own role; an organization can never lose its last admin (trigger)
 
-> **Status:** all five migrations were applied successfully to Supabase project `pmtdaopxvisqwyhaenvz` on 2026-10-15 (no SQL errors).
+> **Status:** all six migrations were applied successfully to Supabase project `pmtdaopxvisqwyhaenvz` on 2026-10-15 (no SQL errors).
 > Supabase security advisor: 11 WARN `authenticated_security_definer_function_executable` — **intentional**: the RLS helper functions and the two RPCs
 > must be callable by signed-in users (the API calls `schematic_level` and the RPCs as the user); they only reveal the caller's own access.
 > Performance advisor: composite-FK indexes added in migration 4; remaining INFO "unused index" notices are expected on an empty database.
