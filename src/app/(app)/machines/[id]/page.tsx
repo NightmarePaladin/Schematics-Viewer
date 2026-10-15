@@ -6,7 +6,7 @@ import { WeatherPanel } from "@/components/weather-panel";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, IssueStatusBadge, MachineStatusBadge, Page, PageHeader, SeverityBadge, fmtDate, one } from "@/components/ui-bits";
-import { requireOrg } from "@/lib/auth";
+import { requireOrgPage } from "@/lib/auth";
 import { ancestorsOf, childrenOf } from "@/lib/machine-tree";
 import { causeIds, effectiveStatus, loadInoperable } from "@/lib/machines";
 import { canCreateMachine, canManageMachines, canUploadSchematic, canWriteMaintenance } from "@/lib/permissions";
@@ -18,7 +18,7 @@ export const metadata = { title: "Machine" };
 export default async function MachineDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) notFound();
-  const s = await requireOrg();
+  const s = await requireOrgPage();
   const { data: m } = await s.supabase.from("machines").select("*").eq("id", id).eq("org_id", s.orgId).maybeSingle();
   if (!m) notFound();
 

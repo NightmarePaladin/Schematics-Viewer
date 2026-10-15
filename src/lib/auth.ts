@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { ApiError, forbidden, unauthorized } from "./api";
 import { levelAtLeast, type OrgRole, type PermLevel } from "./permissions";
 import { createClient } from "./supabase/server";
@@ -64,6 +65,17 @@ export async function requireSession(): Promise<SessionContext> {
 export async function requireOrg(): Promise<SessionContext & { orgId: string; role: OrgRole }> {
   const s = await requireSession();
   if (!s.orgId || !s.role) throw new ApiError(403, "no_organization", "Create or join an organization first.");
+  return s as SessionContext & { orgId: string; role: OrgRole };
+}
+
+/**
+ * Same as requireOrg() but for PAGES: signed-out users go to /login and users with no organization go to /onboarding
+ * (instead of throwing a 403 that renders as an error page). API route handlers keep using requireOrg().
+ */
+export async function requireOrgPage(): Promise<SessionContext & { orgId: string; role: OrgRole }> {
+  const s = await getSession();
+  if (!s) redirect("/login");
+  if (!s.orgId || !s.role) redirect("/onboarding");
   return s as SessionContext & { orgId: string; role: OrgRole };
 }
 

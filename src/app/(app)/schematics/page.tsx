@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { Empty, Page, PageHeader, fmtDate, one } from "@/components/ui-bits";
-import { requireOrg } from "@/lib/auth";
+import { requireOrgPage } from "@/lib/auth";
 
 export const metadata = { title: "Schematics" };
 
 export default async function SchematicsPage() {
-  const s = await requireOrg();
+  const s = await requireOrgPage();
   const { data } = await s.supabase
     .from("schematics")
     .select("id, title, document_number, revision, file_size, created_at, machine:machines(id, name), uploader:profiles!schematics_uploaded_by_fkey(display_name)")

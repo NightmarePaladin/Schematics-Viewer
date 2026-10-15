@@ -1,13 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, Page, PageHeader, one } from "@/components/ui-bits";
 import { TeamsAdmin } from "@/components/teams-admin";
-import { requireOrg } from "@/lib/auth";
+import { requireOrgPage } from "@/lib/auth";
 import { canManageMachines } from "@/lib/permissions";
 
 export const metadata = { title: "Teams" };
 
 export default async function TeamsPage() {
-  const s = await requireOrg();
+  const s = await requireOrgPage();
   const [members, groups, memberships] = await Promise.all([
     s.supabase.from("organization_memberships").select("user_id, role, profile:profiles(display_name, email)").eq("org_id", s.orgId).order("created_at"),
     s.supabase.from("groups").select("id, name, description").eq("org_id", s.orgId).order("name"),

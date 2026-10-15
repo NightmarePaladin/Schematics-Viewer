@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { z } from "zod";
 import { SchematicViewer } from "@/components/viewer/schematic-viewer";
 import { fmtDate, one } from "@/components/ui-bits";
-import { requireOrg } from "@/lib/auth";
+import { requireOrgPage } from "@/lib/auth";
 import { canWriteMaintenance, levelAtLeast, type PermLevel } from "@/lib/permissions";
 
 export const metadata = { title: "Schematic viewer" };
@@ -17,7 +17,7 @@ export default async function ViewerPage({
   const { id } = await params;
   const { page } = await searchParams;
   if (!z.string().uuid().safeParse(id).success) notFound();
-  const s = await requireOrg();
+  const s = await requireOrgPage();
 
   // Server-side authorization: no level => the schematic does not exist for this user.
   const { data: levelData } = await s.supabase.rpc("schematic_level", { p_schematic: id });

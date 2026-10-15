@@ -3,14 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, IssueStatusBadge, Page, PageHeader, SeverityBadge, fmtDate, one, selectClass } from "@/components/ui-bits";
 import { IssueActions } from "@/components/issue-actions";
-import { requireOrg } from "@/lib/auth";
+import { requireOrgPage } from "@/lib/auth";
 import { ISSUE_STATUSES, SEVERITIES } from "@/lib/schemas";
 import { ISSUE_SELECT } from "@/lib/selects";
 
 export const metadata = { title: "Maintenance Logs" };
 
 export default async function MaintenancePage({ searchParams }: { searchParams: Promise<{ status?: string; severity?: string }> }) {
-  const s = await requireOrg();
+  const s = await requireOrgPage();
   const { status, severity } = await searchParams;
   let iq = s.supabase.from("maintenance_issues").select(ISSUE_SELECT).eq("org_id", s.orgId).order("created_at", { ascending: false });
   if (status && (ISSUE_STATUSES as readonly string[]).includes(status)) iq = iq.eq("status", status);

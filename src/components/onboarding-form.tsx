@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -35,7 +35,7 @@ export function OnboardingForm() {
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
-        <CardTitle>Create your organization</CardTitle>
+        <h1 className="text-lg font-semibold leading-snug">Create your organization</h1>
         <CardDescription>
           This is your workspace. You become its Admin and can invite registered teammates by email afterwards. If you
           were invited to an existing organization, ask its Admin to add you, then reload.

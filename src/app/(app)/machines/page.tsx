@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Empty, MachineStatusBadge, Page, PageHeader, selectClass } from "@/components/ui-bits";
-import { requireOrg } from "@/lib/auth";
+import { requireOrgPage } from "@/lib/auth";
 import { applyMachineSearch, isSearchField, SEARCH_FIELD_LABELS, type SearchField } from "@/lib/machine-search";
 import { causeIds, effectiveStatus, loadInoperable } from "@/lib/machines";
 import { canCreateMachine } from "@/lib/permissions";
@@ -15,7 +15,7 @@ export default async function MachinesPage({
 }: {
   searchParams: Promise<{ q?: string; field?: string; status?: string; category?: string }>;
 }) {
-  const s = await requireOrg();
+  const s = await requireOrgPage();
   const { q, field: rawField, status, category } = await searchParams;
   const field: SearchField = isSearchField(rawField) ? rawField : "all";
 

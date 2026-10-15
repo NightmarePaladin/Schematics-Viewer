@@ -1,14 +1,14 @@
 import { redirect } from "next/navigation";
 import { MachineForm } from "@/components/machine-form";
 import { Page, PageHeader } from "@/components/ui-bits";
-import { requireOrg } from "@/lib/auth";
+import { requireOrgPage } from "@/lib/auth";
 import { canCreateMachine } from "@/lib/permissions";
 
 export const metadata = { title: "Register machine" };
 
 export default async function NewMachinePage({ searchParams }: { searchParams: Promise<{ parent?: string }> }) {
   const { parent } = await searchParams;
-  const s = await requireOrg();
+  const s = await requireOrgPage();
   if (!canCreateMachine(s.role)) redirect("/machines");
   const { data: parents } = await s.supabase.from("machines").select("id, name, serial_number").eq("org_id", s.orgId).order("name");
   return (

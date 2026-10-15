@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Page, PageHeader, fmtDate } from "@/components/ui-bits";
-import { requireOrg } from "@/lib/auth";
+import { requireOrgPage } from "@/lib/auth";
 
 export const metadata = { title: "Settings" };
 
@@ -12,7 +12,7 @@ const ROLES = [
 ];
 
 export default async function SettingsPage() {
-  const s = await requireOrg();
+  const s = await requireOrgPage();
   const { data: org } = await s.supabase.from("organizations").select("name, created_at").eq("id", s.orgId).single();
   const m = s.memberships.find((x) => x.org_id === s.orgId);
   return (

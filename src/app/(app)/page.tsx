@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, IssueStatusBadge, Page, PageHeader, SeverityBadge, fmtDate, one } from "@/components/ui-bits";
-import { requireOrg } from "@/lib/auth";
+import { requireOrgPage } from "@/lib/auth";
 import { loadInoperable } from "@/lib/machines";
 import { ISSUE_SELECT } from "@/lib/selects";
 
 export const metadata = { title: "Dashboard" };
 
 export default async function Dashboard() {
-  const s = await requireOrg();
+  const s = await requireOrgPage();
   const count = async (table: string, f?: (q: any) => any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
     let q = s.supabase.from(table).select("id", { count: "exact", head: true }).eq("org_id", s.orgId);
     if (f) q = f(q);
