@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { check, forbidden, handler, parseBody } from "@/lib/api";
-import { audit, requireOrg } from "@/lib/auth";
+import { requireOrg } from "@/lib/auth";
 import { canCreateMachine } from "@/lib/permissions";
 import { locationCreateSchema } from "@/lib/schemas";
 
@@ -25,6 +25,5 @@ export const POST = handler(async (req) => {
   if (!canCreateMachine(s.role)) throw forbidden("Your role cannot add locations.");
   const input = await parseBody(req, locationCreateSchema);
   const row = check(await s.supabase.from("locations").insert({ ...input, org_id: s.orgId, created_by: s.user.id }).select().single());
-  await audit(s, s.orgId, "location.create", "location", row.id, { name: row.name });
   return NextResponse.json({ data: row }, { status: 201 });
 });

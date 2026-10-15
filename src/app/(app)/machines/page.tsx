@@ -57,7 +57,7 @@ export default async function MachinesPage({
       <PageHeader
         title="Machines"
         description={filtering ? "Search results include sub-machines." : "Top-level machines and systems. Expand a machine to see its sub-machines."}
-        actions={<><Link href="/locations" className={linkButton({ variant: "outline" })}>Locations</Link>{canCreateMachine(s.role) ? <Link href="/machines/new" className={linkButton()}>Register machine</Link> : null}</>}
+        actions={<><Link href="/locations" className={linkButton({ variant: "outline" })}>Locations</Link><Link href="/machines/labels" className={linkButton({ variant: "outline" })}>QR labels</Link>{canCreateMachine(s.role) ? <Link href="/machines/new" className={linkButton()}>Register machine</Link> : null}</>}
       />
       <form className="mb-4 grid gap-2 sm:grid-cols-[1fr_150px_160px_160px_auto]" role="search">
         <Input name="q" defaultValue={q} placeholder="Search by name, manufacturer, model, location…" aria-label="Search machines" />

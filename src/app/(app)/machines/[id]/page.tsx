@@ -100,6 +100,7 @@ export default async function MachineDetail({ params }: { params: Promise<{ id: 
         actions={
           <>
             <MachineStatusBadge status={statusOf(m.status, id, faults)} />
+            <Link href={`/machines/${id}/label`} className={linkButton({ variant: "outline" })}>QR label</Link>
             {canEdit && <Link href={`/machines/${id}/edit`} className={linkButton({ variant: "outline" })}>Edit</Link>}
           </>
         }

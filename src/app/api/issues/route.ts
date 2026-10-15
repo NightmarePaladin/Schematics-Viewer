@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ApiError, check, forbidden, handler, notFound, parseBody, parseQuery } from "@/lib/api";
-import { audit, requireOrg, requireSchematicLevel } from "@/lib/auth";
+import { requireOrg, requireSchematicLevel } from "@/lib/auth";
 import { canWriteMaintenance } from "@/lib/permissions";
 import { ISSUE_SELECT } from "@/lib/selects";
 import { ISSUE_STATUSES, SEVERITIES, issueCreateSchema } from "@/lib/schemas";
@@ -68,6 +68,5 @@ export const POST = handler(async (req) => {
       .select(ISSUE_SELECT)
       .single(),
   );
-  await audit(s, machine.org_id, "issue.create", "issue", row.id, { severity: row.severity });
   return NextResponse.json({ data: row }, { status: 201 });
 });

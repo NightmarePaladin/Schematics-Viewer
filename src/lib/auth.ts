@@ -100,17 +100,3 @@ export async function requireSchematicLevel(
   if (!levelAtLeast(level, min)) throw forbidden(`This action requires "${min}" access to the schematic.`);
   return level;
 }
-
-export async function audit(
-  s: SessionContext,
-  orgId: string,
-  action: string,
-  entityType: string,
-  entityId: string | null,
-  metadata: Record<string, unknown> = {},
-) {
-  // Best-effort: auditing must not break the user action.
-  await s.supabase
-    .from("audit_events")
-    .insert({ org_id: orgId, actor_id: s.user.id, action, entity_type: entityType, entity_id: entityId, metadata });
-}

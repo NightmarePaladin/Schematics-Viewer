@@ -104,3 +104,18 @@ Built: migration 10 (`critical_fault_machines`), a single `deriveStatus` rule us
 | 37 | `eslint .` started failing on a generated Playwright report bundle | build/test output directories added to the ESLint ignores |
 | 38 | **Flaky E2E under the dev server:** sign-in or the PDF load occasionally hung ("Please wait…", "Loading drawing…") after a production build had rewritten `.next`; Supabase and Vercel responded in <1 s | not an app defect: the full suite passes 18/18 against the production server (`next start`), which is now the recommended way to run E2E |
 Verified: 77 unit, 57 integration, 18 Playwright (production server) all pass; screenshots checked for the collapsed/expanded tree and the inherited-fault banner.
+
+## Iteration 11 — QR labels and a tamper-resistant audit log (2026-10-15)
+Requests: QR codes for machines; audit logs for all work done, viewable only by admins and editable only by the database owner.
+Review of what existed: the old audit log was written by the API routes, so it (a) missed anything not routed through them (annotations, replies, status changes were not logged), (b) could be forged — any member could INSERT their own events directly — and (c) was readable by maintenance managers.
+| # | Finding / decision | Fix |
+|---|--------------------|-----|
+| 39 | App-level auditing is incomplete and forgeable | moved to database triggers on 12 tables (attributed with `auth.uid()`), removed the 14 `audit()` calls; file views via a definer function that checks access |
+| 40 | "Only the DB owner can edit" needs more than missing RLS policies (the service-role key bypasses RLS) | privileges revoked from `anon`/`authenticated`/`service_role` AND guard triggers raising unless `current_user` is `postgres`/`supabase_admin`; verified in the SQL editor and by tests (service role gets `permission denied`) |
+| 41 | A destructive cascade (deleting an organization) must still work | RI actions run as the table owner so the guard allows them; the onboarding E2E (which deletes an organization) passes |
+| 42 | Read access narrowed from admins+managers to **admins only** | policy `audit_select` uses `is_org_admin`; page returns 404 for others, export 403 |
+| 43 | Test/seed activity would pollute an immutable log | changes by the service role (no signed-in user) are not logged; UI-driven test actions are, and 366 of the 378 current entries come from the demo accounts. They cannot be removed from the app; the owner query to purge them is in DATABASE.md |
+| 44 | A QR printed from localhost would point at localhost | `labelOrigin()` uses Vercel's `VERCEL_PROJECT_PRODUCTION_URL` when present; unit-tested |
+| 45 | Test race: my click on "QR label" matched the list page's "QR labels" link before navigation finished | wait for the detail heading and use exact link names |
+| 46 | CSV export could be abused via spreadsheet formulas in names | cells starting with `= + - @` are prefixed with `'`; unit-tested |
+Verified: 96 unit, 69 integration, 25 Playwright (production server) pass; screenshots checked for the label and the audit table.

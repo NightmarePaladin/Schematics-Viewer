@@ -2,6 +2,7 @@
 
 import {
   ClipboardList,
+  ScrollText,
   Cog,
   FileText,
   LayoutDashboard,
@@ -28,6 +29,8 @@ const NAV = [
   { href: "/teams", label: "Teams", icon: Users },
   { href: "/settings", label: "Settings", icon: Cog },
 ];
+/** Only organization admins see (and can open) the audit log. */
+const ADMIN_NAV = [{ href: "/audit", label: "Audit log", icon: ScrollText }];
 
 interface Props {
   children: React.ReactNode;
@@ -81,7 +84,7 @@ export function AppShell({ children, user, role, orgId, orgs }: Props) {
         <span className={cn("font-semibold tracking-wide", collapsed && "md:hidden")}>SchematicHub</span>
       </div>
       <ul className="flex-1 space-y-1 p-2">
-        {NAV.map(({ href, label, icon: Icon }) => (
+        {[...NAV, ...(role === "admin" ? ADMIN_NAV : [])].map(({ href, label, icon: Icon }) => (
           <li key={href}>
             <Link
               href={href}
@@ -116,10 +119,10 @@ export function AppShell({ children, user, role, orgId, orgs }: Props) {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden print:block print:h-auto print:overflow-visible">
       <aside
         className={cn(
-          "hidden shrink-0 border-r bg-sidebar text-sidebar-foreground transition-[width] md:block",
+          "hidden shrink-0 border-r bg-sidebar text-sidebar-foreground transition-[width] md:block print:hidden",
           collapsed ? "w-16" : "w-60",
         )}
       >
@@ -134,7 +137,7 @@ export function AppShell({ children, user, role, orgId, orgs }: Props) {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-background px-3">
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-background px-3 print:hidden">
           <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open navigation" onClick={() => setMobileOpen(true)}>
             <Menu />
           </Button>
@@ -174,7 +177,7 @@ export function AppShell({ children, user, role, orgId, orgs }: Props) {
             </Button>
           </div>
         </header>
-        <main id="main" className="min-h-0 flex-1 overflow-auto">
+        <main id="main" className="min-h-0 flex-1 overflow-auto print:overflow-visible">
           {children}
         </main>
       </div>

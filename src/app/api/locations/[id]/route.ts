@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ApiError, fromDbError, handler, notFound, parseBody } from "@/lib/api";
-import { audit, requireOrg } from "@/lib/auth";
+import { requireOrg } from "@/lib/auth";
 import { locationUpdateSchema } from "@/lib/schemas";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -21,7 +21,6 @@ export const PATCH = handler<Ctx>(async (req, ctx) => {
   const { data, error } = await s.supabase.from("locations").update(patch).eq("id", id).select().maybeSingle();
   if (error) throw fromDbError(error);
   if (!data) throw new ApiError(403, "forbidden", "Only organization admins and maintenance managers can edit locations.");
-  await audit(s, s.orgId, "location.update", "location", id, { fields: Object.keys(patch) });
   return NextResponse.json({ data });
 });
 
@@ -34,6 +33,5 @@ export const DELETE = handler<Ctx>(async (_req, ctx) => {
   const { data, error } = await s.supabase.from("locations").delete().eq("id", id).select("id");
   if (error) throw fromDbError(error);
   if (!data?.length) throw new ApiError(403, "forbidden", "Only organization admins and maintenance managers can delete locations.");
-  await audit(s, s.orgId, "location.delete", "location", id);
   return new NextResponse(null, { status: 204 });
 });

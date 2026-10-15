@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ApiError, fromDbError, handler, notFound, parseBody } from "@/lib/api";
-import { audit, requireOrg } from "@/lib/auth";
+import { requireOrg } from "@/lib/auth";
 import { ISSUE_SELECT } from "@/lib/selects";
 import { issueUpdateSchema } from "@/lib/schemas";
 
@@ -59,7 +59,6 @@ export const PATCH = handler<Ctx>(async (req, ctx) => {
       });
     }
   }
-  await audit(s, before.org_id, "issue.update", "issue", id, { fields: Object.keys(patch) });
   return NextResponse.json({ data });
 });
 

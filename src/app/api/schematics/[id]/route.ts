@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { check, fromDbError, handler, notFound, parseBody } from "@/lib/api";
-import { audit, requireOrg, requireSchematicLevel } from "@/lib/auth";
+import { requireOrg, requireSchematicLevel } from "@/lib/auth";
 import { schematicUpdateSchema } from "@/lib/schemas";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -32,7 +32,6 @@ export const PATCH = handler<Ctx>(async (req, ctx) => {
   const patch = await parseBody(req, schematicUpdateSchema);
   const { data, error } = await s.supabase.from("schematics").update(patch).eq("id", id).select().single();
   if (error) throw fromDbError(error);
-  await audit(s, s.orgId, "schematic.update", "schematic", id, { fields: Object.keys(patch) });
   return NextResponse.json({ data });
 });
 
@@ -45,6 +44,5 @@ export const DELETE = handler<Ctx>(async (_req, ctx) => {
   if (row) await s.supabase.storage.from("schematics").remove([row.storage_path]);
   const del = await s.supabase.from("schematics").delete().eq("id", id);
   if (del.error) throw fromDbError(del.error);
-  await audit(s, s.orgId, "schematic.delete", "schematic", id);
   return new NextResponse(null, { status: 204 });
 });

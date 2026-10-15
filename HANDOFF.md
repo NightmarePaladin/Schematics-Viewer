@@ -29,7 +29,12 @@ _Last updated: 2026-10-15._
 - Decision to confirm with the project owner: "major" = severity high **or** critical (constant `MAJOR_SEVERITIES`; SQL function `inoperable_machines`).
 - Open item for the project owner: enable **leaked password protection** in Supabase Auth settings (advisor warning).
 
-## Status and tree list (latest)
+## QR labels and audit log (latest)
+- **QR labels:** machine page -> *QR label*; Machines list -> *QR labels* (sheet). PNG/SVG at `/api/machines/<id>/qr`. Print from the deployed site: labels point at the production domain on Vercel (localhost when run locally).
+- **Audit log:** sidebar *Audit log* (admins only), CSV export. Written by DB triggers; append-only for everyone except the database owner. 378 entries exist, almost all from test runs by `@schematichub.test` accounts; to purge them as owner run the query in DATABASE.md (not done: it is your audit trail).
+- To correct an audit entry, use the Supabase SQL editor (runs as `postgres`). The service-role key cannot.
+
+## Status and tree list
 - **Effective status** = critical fault (own unresolved critical-severity issue) > inoperable (inherited from a critical sub-component with a high/critical issue) > stored status. Derived live; clears on resolution. Filterable.
 - Machines list shows top-level machines only; expand with the chevron, or search/filter to see sub-machines directly. The machine detail page still lists its sub-machines.
 - The demo "Pump P1 bearing failure" issue was resolved by a user, so the seeded Hydraulic Press 7 is currently operable; raise a high issue on "Hydraulic Power Unit HPU-7" (a critical component) to see the inheritance, or a *critical* issue to see "critical fault".

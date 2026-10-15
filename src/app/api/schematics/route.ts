@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ApiError, check, fromDbError, forbidden, handler, notFound, parseQuery } from "@/lib/api";
-import { audit, requireOrg } from "@/lib/auth";
+import { requireOrg } from "@/lib/auth";
 import { canUploadSchematic } from "@/lib/permissions";
 import { MAX_PDF_BYTES, schematicMetaSchema } from "@/lib/schemas";
 
@@ -98,6 +98,5 @@ export const POST = handler(async (req) => {
   const row = check(
     await s.supabase.from("schematics").select("id, machine_id, title, document_number, revision, file_size, created_at").eq("id", id).single(),
   );
-  await audit(s, machine.org_id, "schematic.upload", "schematic", id, { size: file.size });
   return NextResponse.json({ data: row }, { status: 201 });
 });

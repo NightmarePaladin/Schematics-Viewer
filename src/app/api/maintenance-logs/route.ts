@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { check, forbidden, handler, notFound, parseBody, parseQuery } from "@/lib/api";
-import { audit, requireOrg } from "@/lib/auth";
+import { requireOrg } from "@/lib/auth";
 import { canWriteMaintenance } from "@/lib/permissions";
 import { logCreateSchema } from "@/lib/schemas";
 
@@ -41,6 +41,5 @@ export const POST = handler(async (req) => {
       .select(SELECT)
       .single(),
   );
-  await audit(s, machine.org_id, "log.create", "maintenance_log", row.id);
   return NextResponse.json({ data: row }, { status: 201 });
 });

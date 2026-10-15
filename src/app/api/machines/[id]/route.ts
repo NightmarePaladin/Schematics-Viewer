@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ApiError, fromDbError, handler, notFound, parseBody } from "@/lib/api";
-import { audit, requireOrg } from "@/lib/auth";
+import { requireOrg } from "@/lib/auth";
 import { assertParentVisible, loadFaults, statusOf } from "@/lib/machines";
 import { machineUpdateSchema } from "@/lib/schemas";
 
@@ -41,7 +41,6 @@ export const PATCH = handler<Ctx>(async (req, ctx) => {
   const { data, error } = await s.supabase.from("machines").update(patch).eq("id", id).select().maybeSingle();
   if (error) throw fromDbError(error);
   if (!data) throw new ApiError(403, "forbidden", "You do not have permission to edit this machine.");
-  await audit(s, s.orgId, "machine.update", "machine", id, { fields: Object.keys(patch) });
   return NextResponse.json({ data });
 });
 
@@ -53,7 +52,6 @@ export const DELETE = handler<Ctx>(async (_req, ctx) => {
   if (error) throw fromDbError(error);
   if (!data?.length) throw new ApiError(403, "forbidden", "Only organization admins and maintenance managers can delete machines.");
   // Storage objects of its schematics are cleaned up by the schematic delete route; remaining files are orphaned-safe (private).
-  await audit(s, s.orgId, "machine.delete", "machine", id);
   return new NextResponse(null, { status: 204 });
 });
 

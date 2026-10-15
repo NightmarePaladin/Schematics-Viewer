@@ -75,9 +75,20 @@ group memberships and annotations impossible at the schema level.
 | `/api/maintenance-logs` | GET, POST | append-only |
 | `/api/weather?machine_id=` | GET | authz → Open-Meteo using the machine's own or its location's coordinates → `{ok, …}` or `{ok:false, reason}` |
 | `/api/locations`, `/api/locations/[id]` | GET, POST / PATCH, DELETE | premade locations; members read, writers add, managers edit/delete; responses include machine counts |
+| `/api/machines/[id]/qr` | GET | QR code image (SVG or PNG) for the machine's page |
+| `/api/audit/export` | GET | CSV of the (filtered) audit log, admins only (403 otherwise) |
 | `/api/geocode?q=` | GET | server-side proxy to the Open-Meteo Geocoding API (members only, 5 s timeout, typed failures) |
 
 Errors share one shape: `{ "error": { "code", "message", "details?" } }` with 400/401/403/404/409/413/415/422/502/503.
+
+## Audit log
+Events are produced by database triggers (see DATABASE.md), so every write path is covered and nothing can be skipped or forged from a client. `src/lib/audit.ts` turns raw events into readable text (`describeEvent`), links (`eventLink`), filters
+(`sanitizeFilters`/`applyAuditFilters`, shared by `/audit` and `GET /api/audit/export`) and CSV (`auditToCsv`, which neutralizes spreadsheet formulas). `/audit` is an admin-only server page (404 for everyone else) with pagination (50 per page).
+
+## QR labels
+`src/lib/qr.ts` generates codes with the `qrcode` library (fixed black-on-white, error correction M). `GET /api/machines/[id]/qr?format=svg|png&size=` (signed-in members who can see the machine; otherwise 401/404).
+Printable pages: `/machines/[id]/label` and `/machines/labels` (print CSS hides the app chrome). `labelOrigin()` makes labels point at `VERCEL_PROJECT_PRODUCTION_URL` on Vercel and at the request origin locally.
+A scan simply requests the machine URL: the proxy sends signed-out users to `/login?next=…` and back, and RLS decides what they see.
 
 ## Machine status and the Machines list
 - `src/lib/machine-status.ts` (pure, unit-tested) derives the effective status; `src/lib/machines.ts` loads both fault signals in parallel (`loadFaults`) and every consumer (list page, detail page, dashboard, `GET /api/machines`) uses the same `statusOf()`.

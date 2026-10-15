@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { check, fromDbError, handler, notFound, parseBody } from "@/lib/api";
-import { audit, requireOrg, requireSchematicLevel } from "@/lib/auth";
+import { requireOrg, requireSchematicLevel } from "@/lib/auth";
 import { grantCreateSchema } from "@/lib/schemas";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -60,7 +60,6 @@ export const POST = handler<Ctx>(async (req, ctx) => {
         .select()
         .single();
   if (res.error) throw fromDbError(res.error);
-  await audit(s, sch.org_id, "grant.set", "schematic", id, { [col]: grantee, level: body.level });
   return NextResponse.json({ data: res.data }, { status: existing ? 200 : 201 });
 });
 
@@ -74,6 +73,5 @@ export const DELETE = handler<Ctx>(async (req, ctx) => {
   const { grant_id } = delQuery.parse(Object.fromEntries(new URL(req.url).searchParams));
   const { error } = await s.supabase.from("schematic_access_grants").delete().eq("id", grant_id).eq("schematic_id", id);
   if (error) throw fromDbError(error);
-  await audit(s, s.orgId, "grant.revoke", "schematic", id, { grant_id });
   return new NextResponse(null, { status: 204 });
 });

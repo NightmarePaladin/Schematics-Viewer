@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { check, forbidden, handler, parseBody, parseQuery } from "@/lib/api";
-import { audit, requireOrg } from "@/lib/auth";
+import { requireOrg } from "@/lib/auth";
 import { effectiveCoords, firstOf } from "@/lib/location-utils";
 import { assertParentVisible, loadFaults, statusOf } from "@/lib/machines";
 import { STATUS_FILTERS } from "@/lib/machine-status";
@@ -56,6 +56,5 @@ export const POST = handler(async (req) => {
       .select()
       .single(),
   );
-  await audit(s, s.orgId, "machine.create", "machine", row.id, { serial_number: row.serial_number });
   return NextResponse.json({ data: row }, { status: 201 });
 });

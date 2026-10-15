@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { audit, requireOrg, requireRole } from "@/lib/auth";
+import { requireOrg, requireRole } from "@/lib/auth";
 import { check, fromDbError, handler, parseBody } from "@/lib/api";
 import { memberAddSchema } from "@/lib/schemas";
 
@@ -30,6 +30,5 @@ export const POST = handler(async (req) => {
     if (error.code === "42501") return NextResponse.json({ error: { code: "forbidden", message: error.message } }, { status: 403 });
     throw fromDbError(error);
   }
-  await audit(s, s.orgId, "member.add", "membership", data as string, { role: body.role });
   return NextResponse.json({ id: data }, { status: 201 });
 });

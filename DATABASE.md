@@ -10,10 +10,11 @@ Migrations (apply in order) live in `supabase/migrations/`:
 6. `20261015000006_protect_admins.sql` — admins cannot lower their own role; an organization can never lose its last admin (trigger)
 7. `20261015000007_machine_hierarchy.sql` — `machines.parent_id` (composite FK, same organization), no self/loop parents, depth limit 10
 8. `20261015000008_critical_components.sql` — `machines.is_critical` and `inoperable_machines(org)` (derived inherited state)
+11. `20261015000011_audit_log.sql` — trigger-based, admin-readable, append-only audit log
 10. `20261015000010_critical_faults.sql` — `critical_fault_machines(org)`: machines with their own unresolved critical-severity issue (derived)
 9. `20261015000009_locations.sql` — `locations` table, `machines.location_id`, name-sync triggers, RLS, conversion of existing free-text locations
 
-> **Status:** all ten migrations were applied successfully to Supabase project `pmtdaopxvisqwyhaenvz` on 2026-10-15 (no SQL errors).
+> **Status:** all eleven migrations were applied successfully to Supabase project `pmtdaopxvisqwyhaenvz` on 2026-10-15 (no SQL errors).
 > Supabase security advisor: 11 WARN `authenticated_security_definer_function_executable` — **intentional**: the RLS helper functions and the two RPCs
 > must be callable by signed-in users (the API calls `schematic_level` and the RPCs as the user); they only reveal the caller's own access.
 > Performance advisor: composite-FK indexes added in migration 4; remaining INFO "unused index" notices are expected on an empty database.
@@ -75,6 +76,18 @@ All helper functions are `SECURITY DEFINER` with `search_path = ''`, executable 
   derives it from open issues, so it clears the moment the issue is resolved (or downgraded to low/medium). It returns the cause machine's name only to callers who can view that machine.
 - The stored `status` field is untouched. **Effective status** (`src/lib/machine-status.ts`) = `critical` if `critical_fault_machines()` lists the machine (own unresolved critical-severity issue),
   else `inoperable` if `inoperable_machines()` lists it (inherited), else the stored status; a `retired` machine stays retired. Both functions are SECURITY DEFINER, members-only, and read live issues, so nothing needs cleaning up on resolution.
+
+## Audit log (`audit_events`)
+- **Recorded by the database, not the app.** AFTER triggers (`audit_row_change`) on organizations, memberships, groups, group members, machines, locations, schematics, access grants, annotations, replies, issues and maintenance logs write one row per change:
+  `actor_id`, `actor_label` (name + email snapshot), `action` (`machine.created|updated|deleted`, …), `entity_type`, `entity_id` and `metadata` (a label, related ids, and for updates a `changes` object `{column: {from, to}}`; no-op updates and bookkeeping columns are skipped).
+  File views (which triggers cannot see) are recorded by `log_schematic_view()` (SECURITY DEFINER; ignores callers without View access).
+- **Only user-attributed actions are logged** (`auth.uid()` must be present). Changes made with the service-role key, scripts or the SQL editor have no signed-in user and are not logged.
+- **Who can read:** organization **Admins** only (RLS `is_org_admin`). Maintenance managers, technicians and viewers see nothing.
+- **Who can write:** nobody through the API. `INSERT/UPDATE/DELETE/TRUNCATE` are revoked from `anon`, `authenticated` and `service_role`, there are no write policies, and guard triggers (`audit_events_guard`) raise unless `current_user` is `postgres` or `supabase_admin`
+  (the roles behind the Supabase SQL editor). Cascades from deleting an organization run as the table owner and are allowed.
+- **Owner maintenance** (Supabase dashboard → SQL editor, which runs as `postgres`). Example: remove entries made by the demo/test accounts:
+  `delete from public.audit_events where actor_label ilike '%@schematichub.test%';` (this is destructive and is itself not logged).
+- Entries written before migration 11 by the old app-level logger remain (action names like `machine.create`); they are displayed as-is.
 
 ## Locations
 - `locations(org_id, name, description, latitude, longitude)`: unique name per organization (case-insensitive); coordinates optional but both-or-neither and range-checked.
