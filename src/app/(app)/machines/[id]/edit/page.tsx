@@ -15,10 +15,11 @@ export default async function EditMachinePage({ params }: { params: Promise<{ id
   if (!canManageMachines(s.role) && machine.created_by !== s.user.id) redirect(`/machines/${id}`);
   const { data: all } = await s.supabase.from("machines").select("id, name, serial_number, parent_id").eq("org_id", s.orgId).order("name");
   const parents = eligibleParents(all ?? [], id);
+  const { data: locations } = await s.supabase.from("locations").select("id, name, latitude, longitude").eq("org_id", s.orgId).order("name");
   return (
     <Page className="max-w-3xl">
       <PageHeader title={`Edit ${machine.name}`} />
-      <MachineForm machine={machine} parents={parents} />
+      <MachineForm machine={machine} parents={parents} locations={locations ?? []} />
     </Page>
   );
 }

@@ -29,4 +29,7 @@ export async function cleanupE2eData() {
     if (paths.length) await admin.storage.from("schematics").remove(paths);
     await admin.from("machines").delete().in("id", machineIds);
   }
+
+  // locations created by locations.spec
+  await admin.from("locations").delete().ilike("name", "E2E %");
 }

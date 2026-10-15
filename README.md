@@ -14,9 +14,9 @@ maintenance records to exact coordinates on a drawing page.
 |---|-------------|-----------------------|
 | 1 | Working server-side backend | Next.js Route Handlers in `src/app/api/**` with Zod validation, server-side authorization (`src/lib/auth.ts`, `src/lib/permissions.ts`), proxy session refresh (`src/proxy.ts`). 17 route files, see [ARCHITECTURE.md](ARCHITECTURE.md#api-surface). |
 | 2 | Persistent database | Supabase PostgreSQL: 13 tables, FKs, indexes, RLS, triggers — `supabase/migrations/*.sql`, described in [DATABASE.md](DATABASE.md). Private Storage bucket for PDFs. |
-| 3 | Real external API | Open-Meteo weather, requested server-side by `src/lib/weather.ts` via `GET /api/weather`. 5 s timeout, 10 min cache, fallback states. Verified by a live-network test (`tests/integration/weather-live.test.ts`). |
+| 3 | Real external API | Open-Meteo **weather** (`src/lib/weather.ts` via `GET /api/weather`) and Open-Meteo **geocoding** (`src/lib/geocode.ts` via `GET /api/geocode`, fills location coordinates from a place name). 5 s timeout, 10 min cache, fallback states. Verified by a live-network test (`tests/integration/weather-live.test.ts`). |
 | 4 | New technology / novel use case | PDF.js rendering with an SVG annotation layer using **normalized, rotation-aware page coordinates** (`src/lib/coords.ts`); RLS-enforced document ACL with user + group grants resolved in SQL and mirrored in storage policies; signed-URL-only delivery. |
-| 5 | Iterate and test | Unit tests (57), live-network test (2), RLS/storage/hierarchy integration tests (39), Playwright E2E (12), and a candid change log in [ITERATIONS.md](ITERATIONS.md). Results in [TESTING.md](TESTING.md). |
+| 5 | Iterate and test | Unit tests (71), live-network tests (4), RLS/storage/hierarchy/location integration tests (50), Playwright E2E (17), and a candid change log in [ITERATIONS.md](ITERATIONS.md). Results in [TESTING.md](TESTING.md). |
 
 ## Quick start
 
@@ -33,12 +33,12 @@ Without `.env.local` the app still starts and shows a `/setup` page explaining w
 1. Create a project at <https://supabase.com> (or use an existing one).
 2. **Project Settings → API**: copy the project URL and the `anon`/publishable key into `.env.local`
    (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`).
-3. Apply the migrations **in order (8 files)** — either paste each file into **SQL Editor → Run**, or with the CLI:
+3. Apply the migrations **in order (9 files)** — either paste each file into **SQL Editor → Run**, or with the CLI:
    ```bash
    npx supabase link --project-ref <your-ref>
    npx supabase db push
    ```
-   Files: `20261015000001_schema.sql`, `20261015000002_functions_rls.sql`, `20261015000003_storage.sql`, `20261015000004_fk_indexes.sql`, `20261015000005_machines_select_returning_fix.sql`, `20261015000006_protect_admins.sql`, `20261015000007_machine_hierarchy.sql`, `20261015000008_critical_components.sql`.
+   Files: `20261015000001_schema.sql`, `20261015000002_functions_rls.sql`, `20261015000003_storage.sql`, `20261015000004_fk_indexes.sql`, `20261015000005_machines_select_returning_fix.sql`, `20261015000006_protect_admins.sql`, `20261015000007_machine_hierarchy.sql`, `20261015000008_critical_components.sql`, `20261015000009_locations.sql`.
 4. **Authentication → Providers → Email**: for quick local demos turn **off** “Confirm email” (otherwise new users must
    click an emailed link first). **Authentication → URL Configuration**: add `http://localhost:3000/**` and your Vercel URL
    as redirect URLs.
@@ -58,8 +58,11 @@ Without `.env.local` the app still starts and shows a `/setup` page explaining w
 3. In the viewer, open the **Access** tab to grant View/Comment/Edit/Manage to people or groups (Teams page creates groups).
 4. Pick a tool (point, comment, issue box, callout), click/drag on the drawing, write a note, save. Click a marker to open its thread, reply, set status, or create a maintenance issue.
 5. Add coordinates (latitude/longitude) to a machine to see live weather context on its page.
-6. **Search** machines on the Machines page by location, name, manufacturer, model (or all fields incl. serial/asset); several words must all match.
-7. **Systems and sub-machines:** when registering/editing a machine pick *Part of* (parent). Tick **Critical component** on a sub-machine: while it has an
+6. **Locations:** *Locations* (button on the Machines page) holds premade places with optional coordinates. Add one by typing a name and clicking
+   *Look up coordinates* (Open-Meteo geocoding), or type latitude/longitude. When registering a machine, pick its location from the **Location dropdown**;
+   weather context then uses the location's coordinates automatically (a machine can still override with its own coordinates). Renaming a location renames it on all its machines.
+7. **Search** machines on the Machines page by location, name, manufacturer, model (or all fields incl. serial/asset); several words must all match.
+8. **Systems and sub-machines:** when registering/editing a machine pick *Part of* (parent). Tick **Critical component** on a sub-machine: while it has an
    unresolved **high or critical** issue, its parent is shown as **Inoperable (inherited)** (list, detail, dashboard) until the issue is resolved.
    The state is computed live, never stored, and continues upward only through parents that are themselves marked critical.
 

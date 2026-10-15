@@ -63,6 +63,7 @@ export interface SeedResult {
   otherOrgId: string;
   groupId: string;
   machines: { press: string; compressor: string; tower: string; hpu: string; cabinet: string };
+  locations: { bay3: string; yard: string; roof: string };
   otherMachineId: string;
   schematicId: string;
   privateSchematicId: string;
@@ -79,6 +80,14 @@ async function ensureOrg(admin: SupabaseClient, name: string, createdBy: string)
 async function ensureMember(admin: SupabaseClient, orgId: string, userId: string, role: string) {
   const { error } = await admin.from("organization_memberships").upsert({ org_id: orgId, user_id: userId, role }, { onConflict: "org_id,user_id" });
   if (error) throw error;
+}
+
+async function ensureLocation(admin: SupabaseClient, orgId: string, name: string, lat: number | null, lon: number | null, createdBy: string): Promise<string> {
+  const { data: found } = await admin.from("locations").select("id").eq("org_id", orgId).ilike("name", name).maybeSingle();
+  if (found) return found.id;
+  const { data, error } = await admin.from("locations").insert({ org_id: orgId, name, latitude: lat, longitude: lon, created_by: createdBy }).select("id").single();
+  if (error) throw error;
+  return data.id;
 }
 
 async function ensureMachine(admin: SupabaseClient, row: Record<string, unknown>): Promise<string> {
@@ -128,15 +137,20 @@ export async function seed(): Promise<SeedResult> {
   }
   await admin.from("group_memberships").upsert({ group_id: groupId, user_id: ids.tech2, org_id: orgId }, { onConflict: "group_id,user_id" });
 
+  // Premade locations (machines pick one from a dropdown; coordinates are inherited for weather)
+  const locBay3 = await ensureLocation(admin, orgId, "Plant 1 / Bay 3", null, null, ids.admin);
+  const locYard = await ensureLocation(admin, orgId, "Yard North", 41.8781, -87.6298, ids.admin);
+  const locRoof = await ensureLocation(admin, orgId, "Plant 1 roof", 41.8827, -87.6233, ids.admin);
+
   const common = { org_id: orgId, created_by: ids.admin };
   const machines = {
-    press: await ensureMachine(admin, { ...common, name: "Hydraulic Press 7", category: "Press", manufacturer: "Forgeworks", model_number: "HP-450", serial_number: "FW-10042", asset_number: "A-0007", location: "Plant 1 / Bay 3", status: "operational", description: "450-ton indoor forming press." }),
-    compressor: await ensureMachine(admin, { ...common, name: "Outdoor Compressor C2", category: "Compressor", manufacturer: "AirMaster", model_number: "AM-220", serial_number: "AM-77310", location: "Yard North", latitude: 41.8781, longitude: -87.6298, installed_on: "2021-05-14", status: "degraded", description: "Rooftop screw compressor exposed to weather." }),
-    tower: await ensureMachine(admin, { ...common, name: "Cooling Tower CT-1", category: "Cooling", manufacturer: "AirMaster", model_number: "CT-900", serial_number: "CT-00031", location: "Plant 1 roof", latitude: 41.8827, longitude: -87.6233, status: "operational" }),
+    press: await ensureMachine(admin, { ...common, name: "Hydraulic Press 7", category: "Press", manufacturer: "Forgeworks", model_number: "HP-450", serial_number: "FW-10042", asset_number: "A-0007", location_id: locBay3, status: "operational", description: "450-ton indoor forming press." }),
+    compressor: await ensureMachine(admin, { ...common, name: "Outdoor Compressor C2", category: "Compressor", manufacturer: "AirMaster", model_number: "AM-220", serial_number: "AM-77310", location_id: locYard, installed_on: "2021-05-14", status: "degraded", description: "Rooftop screw compressor exposed to weather." }),
+    tower: await ensureMachine(admin, { ...common, name: "Cooling Tower CT-1", category: "Cooling", manufacturer: "AirMaster", model_number: "CT-900", serial_number: "CT-00031", location_id: locRoof, status: "operational" }),
   };
   // Hierarchy demo: the press is a system; the HPU is a CRITICAL component, the cabinet is not.
-  const hpu = await ensureMachine(admin, { ...common, name: "Hydraulic Power Unit HPU-7", category: "Hydraulics", manufacturer: "Forgeworks", model_number: "HPU-90", serial_number: "FW-HPU-7", location: "Plant 1 / Bay 3", status: "operational", parent_id: machines.press, is_critical: true });
-  const cabinet = await ensureMachine(admin, { ...common, name: "Control Cabinet CC-7", category: "Controls", manufacturer: "Forgeworks", model_number: "CC-12", serial_number: "FW-CC-7", location: "Plant 1 / Bay 3", status: "operational", parent_id: machines.press, is_critical: false });
+  const hpu = await ensureMachine(admin, { ...common, name: "Hydraulic Power Unit HPU-7", category: "Hydraulics", manufacturer: "Forgeworks", model_number: "HPU-90", serial_number: "FW-HPU-7", location_id: locBay3, status: "operational", parent_id: machines.press, is_critical: true });
+  const cabinet = await ensureMachine(admin, { ...common, name: "Control Cabinet CC-7", category: "Controls", manufacturer: "Forgeworks", model_number: "CC-12", serial_number: "FW-CC-7", location_id: locBay3, status: "operational", parent_id: machines.press, is_critical: false });
   await admin.from("machines").update({ parent_id: machines.press, is_critical: true }).eq("id", hpu);
   await admin.from("machines").update({ parent_id: machines.press, is_critical: false }).eq("id", cabinet);
   const otherMachineId = await ensureMachine(admin, { org_id: otherOrgId, created_by: ids.outsider, name: "Other Corp Boiler", category: "Boiler", manufacturer: "AirMaster", model_number: "B-1", serial_number: "AM-77310", status: "operational" });
@@ -183,5 +197,5 @@ export async function seed(): Promise<SeedResult> {
     });
   }
 
-  return { ids, orgId, otherOrgId, groupId: groupId!, machines: { ...machines, hpu, cabinet }, otherMachineId, schematicId, privateSchematicId };
+  return { ids, orgId, otherOrgId, groupId: groupId!, machines: { ...machines, hpu, cabinet }, locations: { bay3: locBay3, yard: locYard, roof: locRoof }, otherMachineId, schematicId, privateSchematicId };
 }

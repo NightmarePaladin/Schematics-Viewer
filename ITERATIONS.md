@@ -82,3 +82,13 @@ Built: shared search module + "Search in" selector; migrations 7-8; parent/criti
 | 28 | Several E2E locators became ambiguous once child rows repeated the parent's name | locators scoped to the name column |
 | 29 | The failing component itself still read "Operational" with nothing marking it as the cause | "major issue" marker in list/sub-machine list and a notice on its own page naming what it has taken down |
 Supabase security advisor: still only the intentional SECURITY DEFINER warnings (12, incl. `inoperable_machines`) plus **leaked-password protection disabled** (an Auth dashboard setting for the project owner).
+
+## Iteration 9 — locations as premade objects (2026-10-15) and first-run fix
+Request: premade locations with coordinates, picked from a dropdown. Built `locations` (migration 9), CRUD API, Locations page, machine form dropdown, inherited coordinates for weather, and a place-name lookup using the Open-Meteo Geocoding API.
+| # | Finding | Fix |
+|---|---------|-----|
+| 30 | **Production log:** a brand-new user with no organization hit the dashboard and got a 403 "Create or join an organization first" instead of being sent to onboarding | pages use `requireOrgPage()` (redirects to /login or /onboarding); API handlers still return JSON errors; new E2E covers every page for a no-org user; onboarding title made a real `<h1>` |
+| 31 | Design choice to avoid drift: keeping both `machines.location` text and a new `location_id` could disagree | trigger copies the name from the location (and on rename); coordinates are never copied, only inherited at read time |
+| 32 | Existing free-text locations and coordinates would have been orphaned | migration converts them into location rows and links machines; machine coordinates that merely repeated the location's are cleared so they inherit |
+| 33 | **Styling bug:** outline-variant links ("Edit", "Add sub-machine", "Locations") showed no border — `buttonVariants()` used directly on a `<Link>` skips class merging, so base `border-transparent` beat `border-border` | `linkButton()` helper that merges classes; found by inspecting a screenshot and computed styles |
+Verified live: a machine at a location with coordinates shows real Open-Meteo temperature/humidity/wind with "from location …"; unit-tested geocoding failure modes; real geocoding request returns Chicago at ~41.9, -87.6.

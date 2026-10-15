@@ -29,6 +29,11 @@ _Last updated: 2026-10-15._
 - Decision to confirm with the project owner: "major" = severity high **or** critical (constant `MAJOR_SEVERITIES`; SQL function `inoperable_machines`).
 - Open item for the project owner: enable **leaked password protection** in Supabase Auth settings (advisor warning).
 
+## Locations (latest)
+- Premade `locations` (name + optional coordinates), managed on **/locations** (button on the Machines page). Machines choose one from a dropdown; weather uses the machine's own coordinates if set, otherwise its location's.
+- A "Look up coordinates" button queries the Open-Meteo Geocoding API (no key). Existing free-text locations were converted by migration 9.
+- Data note for the project owner: the migrated location **"Shaw South Carolina"** has longitude **+80.4706**. South Carolina is in the western hemisphere, so it should almost certainly be **-80.4706** (edit it on /locations). I did not change your data.
+
 ## What was decided
 - User chose a hosted Supabase project (ref `pmtdaopxvisqwyhaenvz`, from their MCP link) but then asked to **build the site first** and set up
   `.env.local` themselves. Migrations 1-4 were applied on 2026-10-15 with the user's approval; no rows have been written yet (seed not run).

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button, linkButton } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Empty, MachineStatusBadge, Page, PageHeader, selectClass } from "@/components/ui-bits";
 import { requireOrgPage } from "@/lib/auth";
@@ -37,7 +37,7 @@ export default async function MachinesPage({
       <PageHeader
         title="Machines"
         description="Registered equipment you have access to."
-        actions={canCreateMachine(s.role) ? <Link href="/machines/new" className={buttonVariants()}>Register machine</Link> : undefined}
+        actions={<><Link href="/locations" className={linkButton({ variant: "outline" })}>Locations</Link>{canCreateMachine(s.role) ? <Link href="/machines/new" className={linkButton()}>Register machine</Link> : null}</>}
       />
       <form className="mb-4 grid gap-2 sm:grid-cols-[1fr_150px_160px_160px_auto]" role="search">
         <Input name="q" defaultValue={q} placeholder="Search by name, manufacturer, model, location…" aria-label="Search machines" />

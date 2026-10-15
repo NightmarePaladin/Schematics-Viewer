@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { check, forbidden, handler, parseBody, parseQuery } from "@/lib/api";
 import { audit, requireOrg } from "@/lib/auth";
+import { effectiveCoords, firstOf } from "@/lib/location-utils";
 import { assertParentVisible, effectiveStatus, loadInoperable } from "@/lib/machines";
 import { canCreateMachine } from "@/lib/permissions";
 import { applyMachineSearch, SEARCH_FIELDS } from "@/lib/machine-search";
@@ -18,15 +19,17 @@ const listQuery = z.object({
 export const GET = handler(async (req) => {
   const s = await requireOrg();
   const { q, field, status, category } = parseQuery(req, listQuery);
-  let query = s.supabase.from("machines").select("*").eq("org_id", s.orgId).order("name");
+  let query = s.supabase.from("machines").select("*, place:locations(id, name, latitude, longitude)").eq("org_id", s.orgId).order("name");
   if (status) query = query.eq("status", status);
   if (category) query = query.eq("category", category);
   query = applyMachineSearch(query, q, field);
   const rows = check(await query);
   const inop = await loadInoperable(s, s.orgId);
   return NextResponse.json({
-    data: rows.map((m) => ({
+    data: rows.map(({ place, ...m }) => ({
       ...m,
+      location_record: firstOf(place as { id: string; name: string; latitude: number | null; longitude: number | null } | null),
+      effective_coordinates: effectiveCoords({ latitude: m.latitude, longitude: m.longitude, place: firstOf(place as { latitude: number | null; longitude: number | null } | null) }),
       effective_status: effectiveStatus(m.status, inop.has(m.id)),
       inoperable_because: inop.get(m.id) ?? [],
     })),

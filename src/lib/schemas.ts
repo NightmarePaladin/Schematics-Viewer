@@ -42,6 +42,8 @@ const machineFields = z.object({
   status: z.enum(MACHINE_STATUSES),
   /** Optional parent system/machine this one is a sub-part of. */
   parent_id: z.preprocess((v) => (v === "" || v === undefined ? null : v), z.string().uuid().nullable()),
+  /** Premade location (dropdown). Its name is copied into `location` by a database trigger. */
+  location_id: z.preprocess((v) => (v === "" || v === undefined ? null : v), z.string().uuid().nullable()),
   /** Critical component: a major unresolved issue here makes the parent inoperable until resolved. */
   is_critical: z.boolean(),
 });
@@ -76,6 +78,21 @@ export const machineUpdateSchema = machineFields.partial().superRefine((m, ctx) 
 
 /** "Major" issues: unresolved issues with these severities take a critical component's parent out of service. */
 export const MAJOR_SEVERITIES = ["high", "critical"] as const;
+
+const locationBase = z.object({
+  name: trimmed(120),
+  description: optionalText(500),
+  latitude: optionalNumber(-90, 90),
+  longitude: optionalNumber(-180, 180),
+});
+export const locationCreateSchema = locationBase.superRefine(latLonPair);
+export const locationUpdateSchema = locationBase.partial().superRefine((m, ctx) => {
+  if ((m.latitude === undefined) !== (m.longitude === undefined)) {
+    ctx.addIssue({ code: "custom", path: ["latitude"], message: "Send latitude and longitude together" });
+    return;
+  }
+  if (m.latitude !== undefined && m.longitude !== undefined) latLonPair({ latitude: m.latitude, longitude: m.longitude }, ctx);
+});
 
 export const MAX_PDF_BYTES = 25 * 1024 * 1024;
 

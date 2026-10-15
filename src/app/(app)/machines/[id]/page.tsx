@@ -3,10 +3,11 @@ import { notFound } from "next/navigation";
 import { LogForm, IssueForm } from "@/components/maintenance-forms";
 import { UploadForm } from "@/components/upload-form";
 import { WeatherPanel } from "@/components/weather-panel";
-import { buttonVariants } from "@/components/ui/button";
+import { linkButton } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, IssueStatusBadge, MachineStatusBadge, Page, PageHeader, SeverityBadge, fmtDate, one } from "@/components/ui-bits";
 import { requireOrgPage } from "@/lib/auth";
+import { effectiveCoords, firstOf, formatCoords } from "@/lib/location-utils";
 import { ancestorsOf, childrenOf } from "@/lib/machine-tree";
 import { causeIds, effectiveStatus, loadInoperable } from "@/lib/machines";
 import { canCreateMachine, canManageMachines, canUploadSchematic, canWriteMaintenance } from "@/lib/permissions";
@@ -19,7 +20,7 @@ export default async function MachineDetail({ params }: { params: Promise<{ id: 
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) notFound();
   const s = await requireOrgPage();
-  const { data: m } = await s.supabase.from("machines").select("*").eq("id", id).eq("org_id", s.orgId).maybeSingle();
+  const { data: m } = await s.supabase.from("machines").select("*, place:locations(id, name, latitude, longitude)").eq("id", id).eq("org_id", s.orgId).maybeSingle();
   if (!m) notFound();
 
   const [{ data: tree }, inop] = await Promise.all([
@@ -46,10 +47,12 @@ export default async function MachineDetail({ params }: { params: Promise<{ id: 
   ]);
 
   const canEdit = canManageMachines(s.role) || (canCreateMachine(s.role) && m.created_by === s.user.id);
+  const place = firstOf(m.place as { id: string; name: string; latitude: number | null; longitude: number | null } | null);
+  const coords = effectiveCoords({ latitude: m.latitude, longitude: m.longitude, place });
   const meta: [string, string | null][] = [
     ["Category", m.category], ["Manufacturer", m.manufacturer], ["Model", m.model_number], ["Serial number", m.serial_number],
-    ["Asset number", m.asset_number], ["Location", m.location], ["Installed", m.installed_on ? fmtDate(m.installed_on) : null],
-    ["Coordinates", m.latitude != null ? `${m.latitude}, ${m.longitude}` : null],
+    ["Asset number", m.asset_number], ["Location", place?.name ?? m.location], ["Installed", m.installed_on ? fmtDate(m.installed_on) : null],
+    ["Coordinates", coords.source === "none" ? null : `${formatCoords(coords)} (${coords.source === "location" ? `from location ${place?.name}` : "set on this machine"})`],
     ["Critical component", m.is_critical ? "Yes: a major issue here makes its parent inoperable" : "No"],
   ];
 
@@ -89,7 +92,7 @@ export default async function MachineDetail({ params }: { params: Promise<{ id: 
         actions={
           <>
             <MachineStatusBadge status={effectiveStatus(m.status, causes.length > 0)} />
-            {canEdit && <Link href={`/machines/${id}/edit`} className={buttonVariants({ variant: "outline" })}>Edit</Link>}
+            {canEdit && <Link href={`/machines/${id}/edit`} className={linkButton({ variant: "outline" })}>Edit</Link>}
           </>
         }
       />
@@ -106,7 +109,7 @@ export default async function MachineDetail({ params }: { params: Promise<{ id: 
         </Card>
         <Card>
           <CardHeader><CardTitle>Weather context</CardTitle></CardHeader>
-          <CardContent><WeatherPanel machineId={id} hasLocation={m.latitude != null && m.longitude != null} /></CardContent>
+          <CardContent><WeatherPanel machineId={id} hasLocation={coords.source !== "none"} /></CardContent>
         </Card>
       </div>
 
@@ -129,7 +132,7 @@ export default async function MachineDetail({ params }: { params: Promise<{ id: 
           ) : (
             <Empty>No sub-machines. Link machines here to model a system and its parts.</Empty>
           )}
-          {canCreateMachine(s.role) && <Link href={`/machines/new?parent=${id}`} className={buttonVariants({ variant: "outline", size: "sm" })}>Add sub-machine</Link>}
+          {canCreateMachine(s.role) && <Link href={`/machines/new?parent=${id}`} className={linkButton({ variant: "outline", size: "sm" })}>Add sub-machine</Link>}
         </CardContent>
       </Card>
 

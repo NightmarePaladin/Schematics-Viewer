@@ -10,8 +10,9 @@ Migrations (apply in order) live in `supabase/migrations/`:
 6. `20261015000006_protect_admins.sql` — admins cannot lower their own role; an organization can never lose its last admin (trigger)
 7. `20261015000007_machine_hierarchy.sql` — `machines.parent_id` (composite FK, same organization), no self/loop parents, depth limit 10
 8. `20261015000008_critical_components.sql` — `machines.is_critical` and `inoperable_machines(org)` (derived inherited state)
+9. `20261015000009_locations.sql` — `locations` table, `machines.location_id`, name-sync triggers, RLS, conversion of existing free-text locations
 
-> **Status:** all eight migrations were applied successfully to Supabase project `pmtdaopxvisqwyhaenvz` on 2026-10-15 (no SQL errors).
+> **Status:** all nine migrations were applied successfully to Supabase project `pmtdaopxvisqwyhaenvz` on 2026-10-15 (no SQL errors).
 > Supabase security advisor: 11 WARN `authenticated_security_definer_function_executable` — **intentional**: the RLS helper functions and the two RPCs
 > must be callable by signed-in users (the API calls `schematic_level` and the RPCs as the user); they only reveal the caller's own access.
 > Performance advisor: composite-FK indexes added in migration 4; remaining INFO "unused index" notices are expected on an empty database.
@@ -72,6 +73,15 @@ All helper functions are `SECURITY DEFINER` with `search_path = ''`, executable 
   the effect continues to the grandparent only if the parent is itself critical. Nothing is stored: `inoperable_machines(p_org)` (SECURITY DEFINER, members only)
   derives it from open issues, so it clears the moment the issue is resolved (or downgraded to low/medium). It returns the cause machine's name only to callers who can view that machine.
 - The stored `status` field is untouched; the UI shows `effective status = inoperable (inherited)` when the function reports the machine.
+
+## Locations
+- `locations(org_id, name, description, latitude, longitude)`: unique name per organization (case-insensitive); coordinates optional but both-or-neither and range-checked.
+- `machines.location_id` -> composite FK `(location_id, org_id)` (a machine can only use a location of its own organization); deleting a location un-links machines (they are kept).
+- `machines.location` (text) is kept as a **synced display/search copy** of the location name: trigger `sync_machine_location` copies it when a machine's location changes and
+  `propagate_location_rename` updates it when a location is renamed, so the two can never drift. Machines without a `location_id` may still carry legacy free text.
+- Coordinates are **not copied**: a machine's own `latitude/longitude` (optional override) wins, otherwise it inherits its location's at read time (`effectiveCoords`).
+- RLS: all members read; Admin / Maintenance Manager / Technician add (`created_by = uid`); only Admin / Maintenance Manager edit or delete.
+- Migration 9 also converted existing machine location text into location rows (coordinates from the first machine that had them) and cleared machine coordinates that merely repeated them.
 
 ## Known modelling choices
 - Uploader trigger grant is created after the INSERT statement, so the API inserts the schematic without `RETURNING` and re-selects afterwards.

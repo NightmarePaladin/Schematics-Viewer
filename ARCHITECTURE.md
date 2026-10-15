@@ -73,7 +73,9 @@ group memberships and annotations impossible at the schema level.
 | `/api/annotations/[id]/replies` | GET, POST | threads, resolution notes |
 | `/api/issues`, `/api/issues/[id]` | GET, POST / GET, PATCH | linked to annotation; resolving needs a note and writes a log entry |
 | `/api/maintenance-logs` | GET, POST | append-only |
-| `/api/weather?machine_id=` | GET | authz → Open-Meteo → `{ok, …}` or `{ok:false, reason}` |
+| `/api/weather?machine_id=` | GET | authz → Open-Meteo using the machine's own or its location's coordinates → `{ok, …}` or `{ok:false, reason}` |
+| `/api/locations`, `/api/locations/[id]` | GET, POST / PATCH, DELETE | premade locations; members read, writers add, managers edit/delete; responses include machine counts |
+| `/api/geocode?q=` | GET | server-side proxy to the Open-Meteo Geocoding API (members only, 5 s timeout, typed failures) |
 
 Errors share one shape: `{ "error": { "code", "message", "details?" } }` with 400/401/403/404/409/413/415/422/502/503.
 

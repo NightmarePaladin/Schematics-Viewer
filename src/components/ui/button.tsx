@@ -54,4 +54,9 @@ function Button({
   )
 }
 
-export { Button, buttonVariants }
+/** Class names for a <Link>/<a> that should look like a Button. Goes through cn() so variant classes override the base ones. */
+function linkButton(options?: VariantProps<typeof buttonVariants>) {
+  return cn(buttonVariants(options))
+}
+
+export { Button, buttonVariants, linkButton }
