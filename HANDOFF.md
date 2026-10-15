@@ -29,7 +29,10 @@ _Last updated: 2026-10-15._
 - Decision to confirm with the project owner: "major" = severity high **or** critical (constant `MAJOR_SEVERITIES`; SQL function `inoperable_machines`).
 - Open item for the project owner: enable **leaked password protection** in Supabase Auth settings (advisor warning).
 
-## QR labels and audit log (latest)
+## Session redirect fix (latest)
+- A redirect loop (`ERR_TOO_MANY_REDIRECTS`) hit browsers whose session had been revoked while the token still looked valid. Fixed in the proxy (server-validated user), stale cookies are cleared via `/auth/expired`, and sign-out is now per-device. If someone still sees a loop, have them clear the site's cookies once (the old broken session lives in their browser) and sign in again.
+
+## QR labels and audit log
 - **QR labels:** machine page -> *QR label*; Machines list -> *QR labels* (sheet). PNG/SVG at `/api/machines/<id>/qr`. Print from the deployed site: labels point at the production domain on Vercel (localhost when run locally).
 - **Audit log:** sidebar *Audit log* (admins only), CSV export. Written by DB triggers; append-only for everyone except the database owner. 378 entries exist, almost all from test runs by `@schematichub.test` accounts; to purge them as owner run the query in DATABASE.md (not done: it is your audit trail).
 - To correct an audit entry, use the Supabase SQL editor (runs as `postgres`). The service-role key cannot.

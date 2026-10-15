@@ -14,7 +14,7 @@ Last verified run: 2026-10-15 (Windows 11, Node 24, Chrome stable via Playwright
 | Unit | `npm test` | ✅ **96 / 96** (9 files) |
 | Integration: live Open-Meteo | `npm run test:integration` | ✅ **2 / 2** — real HTTPS requests |
 | Integration: RLS / storage / schema (real Supabase) | `npm run test:integration` | ✅ **67 / 67** (69 total with the weather file; includes 2 live geocoding checks) |
-| Playwright E2E | `npm run e2e` | ✅ **25 / 25** — core flow (2), viewer flows (6), search + collapsible tree + status (5), locations (4), first-run onboarding (1), QR labels + audit log (7) |
+| Playwright E2E | `npm run e2e` | ✅ **27 / 27** — core flow (2), viewer flows (6), search + collapsible tree + status (5), locations (4), first-run onboarding (1), QR labels + audit log (7), sessions (2) |
 
 E2E specs clean up the rows they create (`e2e/cleanup.ts`, service-role key); a full run leaves the database at its seed state (verified by row counts).
 Not covered by automated tests: direct HTTP tests of every route, mobile layout, the pan tool (drag to scroll), email-confirmation sign-up flow, upload rejection paths (non-PDF, >25 MB) in the browser.
@@ -43,6 +43,7 @@ the older assertions in this paragraph still apply: search by location / name / 
 case-insensitive partial and multi-word matching; the seeded critical HPU with an open high issue making the press show "Inoperable (inherited)" in the list, detail banner,
 sub-machine list and dashboard; the cause machine's own notice; creating a sub-machine from its parent (parent pre-selected, critical checkbox disabled until a parent is chosen),
 raising a high issue → parent banner names it, resolving → banner clears; Viewer sees the state but no add/edit controls (with positive controls so absence checks are not vacuous).
+`e2e/session.spec.ts`: a browser holding a valid-looking token for a deleted/revoked account lands on the login page on every route (this test **failed with `net::ERR_TOO_MANY_REDIRECTS` before the fix**), and signing out on one device leaves the same account signed in on another.
 `tests/unit/qr.test.ts` decodes generated PNGs back to their URLs with a QR reader (jsQR) at several sizes; `e2e/qr-and-audit.spec.ts` covers label sheet and single label, the **PNG endpoint scanning back to the exact machine URL**, the signed-out scan -> sign in -> machine flow,
 endpoint protection (401 signed-out, 404 other organization / bad id), a Viewer's label sheet limited to visible machines, print media hiding the app chrome, the audit log showing create/update/delete with actor and `name: a -> b` changes, filters, CSV export, and **admin-only** access (manager/technician/viewer get 404 on the page, 403 on the export, no sidebar link; no write methods).
 `tests/integration/audit.test.ts` covers: automatic recording (annotation create/update/delete, issue resolution with status change, maintenance log, access grants, location changes), no-op updates and service-role changes **not** logged, file-view logging only for permitted users, reading limited to admins (managers/technicians/viewers/other organizations see nothing), and **append-only**: admins and every other role cannot insert/update/delete,

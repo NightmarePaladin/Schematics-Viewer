@@ -119,3 +119,13 @@ Review of what existed: the old audit log was written by the API routes, so it (
 | 45 | Test race: my click on "QR label" matched the list page's "QR labels" link before navigation finished | wait for the detail heading and use exact link names |
 | 46 | CSV export could be abused via spreadsheet formulas in names | cells starting with `= + - @` are prefixed with `'`; unit-tested |
 Verified: 96 unit, 69 integration, 25 Playwright (production server) pass; screenshots checked for the label and the audit table.
+
+## Iteration 12 — production redirect error (2026-10-15)
+Report: "our Vercel site has a redirect error".
+| # | Finding | Fix |
+|---|---------|-----|
+| 47 | **Root cause (reproduced):** the proxy treated a browser as signed in whenever its token verified locally (`getClaims`), while the pages asked the Auth server (`getUser`). When the two disagreed (session revoked, user deleted, or a global sign-out from another device) `/login` redirected to `/` and `/` redirected back to `/login` forever. Signed-out visitors were never affected (checked on the live site), which is why earlier testing did not see it | proxy now uses `getUser()`; stale sessions are cleared through `/auth/expired`; E2E test reproduces the loop (`net::ERR_TOO_MANY_REDIRECTS`) and passes after the fix |
+| 48 | Sign-out used the default **global** scope, so on a shared demo account one person signing out ended everyone's session, which also triggered #47 | sign-out is `scope: "local"`; E2E test with two browsers on one account |
+| 49 | An audit test assumed a user could never have viewed a private schematic, but an earlier legitimate E2E grant had created such a (permanent) entry | compares counts before/after (history is immutable by design) |
+Cost: one extra Auth-server round trip per page navigation.
+Verified: 96 unit, 69 integration, 27 Playwright (production server) pass.

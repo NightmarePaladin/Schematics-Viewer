@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const s = await getSession();
-  if (!s) redirect("/login");
+  if (!s) redirect("/auth/expired");
   if (!s.orgId || !s.role) redirect("/onboarding");
   const { data: profile } = await s.supabase.from("profiles").select("display_name").eq("id", s.user.id).maybeSingle();
   return (

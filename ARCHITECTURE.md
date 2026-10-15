@@ -22,6 +22,12 @@ Open-Meteo  ◄── src/lib/weather.ts (server-side only, via /api/weather)
 enforcement boundary and the Route Handlers add precise status codes (401/403/404/409/422). The service-role key is used only
 by `scripts/` and test fixtures.
 
+## Sessions
+`src/proxy.ts` refreshes the Supabase session and gates pages. It decides "signed in" with `auth.getUser()` (validated by the Auth server), the same check the pages use, so the two can never disagree.
+(Using the locally-checked token alone caused an infinite `/login` <-> `/` redirect for a browser whose session had been revoked or whose user was deleted: the token still looked valid to the proxy, but the pages saw no user.)
+A page that still finds no valid user sends the browser to `/auth/expired`, which clears the stale cookies (this device only) and shows the login page with a "session ended" note.
+Sign-out is `scope: "local"`: it ends only that browser's session, so people sharing a demo account do not sign each other out.
+
 ## Authorization layers (defence in depth)
 
 1. **Session** (`getSession`): the user comes from the verified Supabase JWT. The active organization comes from a cookie but is

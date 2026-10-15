@@ -29,8 +29,10 @@ export async function proxy(request: NextRequest) {
       },
     },
   });
-  const { data } = await supabase.auth.getClaims();
-  const signedIn = Boolean(data?.claims);
+  // Validated against the Auth server (not just the token signature) so this agrees with the pages: a valid-looking token whose
+  // session was revoked or whose user was deleted must count as signed OUT, otherwise /login <-> / redirect forever.
+  const { data } = await supabase.auth.getUser();
+  const signedIn = Boolean(data.user);
 
   const isApi = pathname.startsWith("/api/");
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

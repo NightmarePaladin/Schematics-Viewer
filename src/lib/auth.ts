@@ -74,7 +74,7 @@ export async function requireOrg(): Promise<SessionContext & { orgId: string; ro
  */
 export async function requireOrgPage(): Promise<SessionContext & { orgId: string; role: OrgRole }> {
   const s = await getSession();
-  if (!s) redirect("/login");
+  if (!s) redirect("/auth/expired");
   if (!s.orgId || !s.role) redirect("/onboarding");
   return s as SessionContext & { orgId: string; role: OrgRole };
 }

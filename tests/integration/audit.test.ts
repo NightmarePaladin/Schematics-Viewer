@@ -103,6 +103,10 @@ describe.skipIf(!hasSupabaseCreds())("audit log (real Supabase)", () => {
     });
 
     it("records who viewed a schematic file, only for people who may view it", async () => {
+      // History is immutable (an earlier legitimate view by tech2 may exist), so compare counts before/after instead of asserting absence.
+      const viewsBy = async (schematic: string, actor: string) =>
+        (await eventsFor(c.admin, schematic)).filter((e) => e.action === "schematic.viewed" && e.actor_id === actor).length;
+      const privateBefore = await viewsBy(s.privateSchematicId, s.ids.tech2);
       const before = (await eventsFor(c.admin, s.schematicId)).filter((e) => e.action === "schematic.viewed").length;
       expect((await c.tech.rpc("log_schematic_view", { p_schematic: s.schematicId })).error).toBeNull();
       expect((await c.outsider.rpc("log_schematic_view", { p_schematic: s.schematicId })).error).toBeNull(); // silently ignored
@@ -110,7 +114,7 @@ describe.skipIf(!hasSupabaseCreds())("audit log (real Supabase)", () => {
       const after = (await eventsFor(c.admin, s.schematicId)).filter((e) => e.action === "schematic.viewed");
       expect(after.length).toBe(before + 1);
       expect(after.at(-1)!.actor_label).toContain("Tara Technician");
-      expect((await eventsFor(c.admin, s.privateSchematicId)).some((e) => e.action === "schematic.viewed" && e.actor_id === s.ids.tech2)).toBe(false);
+      expect(await viewsBy(s.privateSchematicId, s.ids.tech2)).toBe(privateBefore); // a call without access adds nothing
     });
   });
 
