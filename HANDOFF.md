@@ -14,6 +14,14 @@ _Last updated: 2026-10-15._
 | 6 Open-Meteo | ✅ real API + weather panel in browser + failure fallback | live tests, Playwright |
 | 7 Tests, docs, deploy prep | ✅ docs + suites run (see TESTING.md); Vercel deploy not done | — |
 
+## Deployment (Vercel)
+- Project `schematics-viewer` (team Paladins) is Git-linked to NightmarePaladin/Schematics-Viewer; every push to `main` deploys to production at `https://schematics-viewer.vercel.app`.
+- Env vars set on Vercel (production + preview): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (publishable key). No service-role key on Vercel.
+- Verified 2026-10-15: deployment READY; `/login` renders the sign-in page (before the variables were added it rendered `/setup`); no runtime errors.
+- **Not verified on the live site:** an actual sign-in/upload (Vercel SSO protection is on, so Playwright cannot reach it without a bypass), and email-confirmation sign-ups.
+- Still to do by the project owner in Supabase **Authentication → URL Configuration**: Site URL = the Vercel URL; add `https://schematics-viewer.vercel.app/**` (and the preview pattern) to Redirect URLs. Password sign-in works without it; confirmation emails need it.
+- Vercel "Vercel Authentication" (SSO) is enabled on deployments: visitors need a Vercel login until it is disabled in Project Settings → Deployment Protection (owner's decision).
+
 ## What was decided
 - User chose a hosted Supabase project (ref `pmtdaopxvisqwyhaenvz`, from their MCP link) but then asked to **build the site first** and set up
   `.env.local` themselves. Migrations 1-4 were applied on 2026-10-15 with the user's approval; no rows have been written yet (seed not run).
