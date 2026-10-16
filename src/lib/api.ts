@@ -40,6 +40,8 @@ export function fromDbError(err: PgLikeError, fallbackMsg = "Database request fa
     case "PGRST116":
       return notFound();
     default:
+      // never shown to the client in production, but always visible in the server logs so failures can be diagnosed
+      console.error("[db_error]", err.code ?? "", err.message ?? "", err.details ?? "");
       return new ApiError(500, "db_error", fallbackMsg, process.env.NODE_ENV === "production" ? undefined : err.message);
   }
 }

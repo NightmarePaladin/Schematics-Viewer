@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ApiError, forbidden, unauthorized } from "./api";
 import { levelAtLeast, type OrgRole, type PermLevel } from "./permissions";
+import { retryOnce } from "./retry";
 import { createClient } from "./supabase/server";
 
 export const ORG_COOKIE = "sh_org";
@@ -93,8 +94,11 @@ export async function requireSchematicLevel(
   schematicId: string,
   min: PermLevel,
 ): Promise<PermLevel> {
-  const { data, error } = await s.supabase.rpc("schematic_level", { p_schematic: schematicId });
-  if (error) throw new ApiError(500, "db_error", "Could not evaluate permissions.");
+  const { data, error } = await retryOnce(() => s.supabase.rpc("schematic_level", { p_schematic: schematicId }));
+  if (error) {
+    console.error("[schematic_level]", error.code ?? "", error.message ?? "");
+    throw new ApiError(500, "db_error", "Could not evaluate permissions.");
+  }
   const level = data as PermLevel | null;
   if (!level) throw new ApiError(404, "not_found", "Schematic not found.");
   if (!levelAtLeast(level, min)) throw forbidden(`This action requires "${min}" access to the schematic.`);

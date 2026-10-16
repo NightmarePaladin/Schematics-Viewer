@@ -126,6 +126,7 @@ export function AnnotationOverlay({
           const c = px(storedToDisplayed({ x: a.x, y: a.y }, rotation));
           return (
             <g key={a.id} {...common} data-cx={c.x} data-cy={c.y}>
+              <circle cx={c.x} cy={c.y} r={22} fill="transparent" /> {/* finger-sized tap target */}
               {sel && <circle cx={c.x} cy={c.y} r={16} fill="none" stroke={color} strokeWidth={2} />}
               <circle cx={c.x} cy={c.y} r={11} fill={color} stroke="#fff" strokeWidth={2} />
               <text x={c.x} y={c.y + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff">{idx + 1}</text>

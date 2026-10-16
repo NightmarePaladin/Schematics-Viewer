@@ -29,6 +29,10 @@ _Last updated: 2026-10-15._
 - Decision to confirm with the project owner: "major" = severity high **or** critical (constant `MAJOR_SEVERITIES`; SQL function `inoperable_machines`).
 - Open item for the project owner: enable **leaked password protection** in Supabase Auth settings (advisor warning).
 
+## Mobile viewer (latest)
+- Phones: bottom "Annotations" tab -> sheet; two-row toolbar; desktop keeps the side panel with a collapsed-rail tab. Not yet tested on real devices or Safari/iOS (tests use Chrome's phone emulation at 375x812): worth a quick check on a real phone, especially pinch-zoom and the pin placement flow.
+- If "Could not open this schematic" appears, **Try again** retries; the server log now prints `[db_error]` / `[schematic_level]` with the real cause (Vercel -> project -> Logs).
+
 ## Session redirect fix (latest)
 - A redirect loop (`ERR_TOO_MANY_REDIRECTS`) hit browsers whose session had been revoked while the token still looked valid. Fixed in the proxy (server-validated user), stale cookies are cleared via `/auth/expired`, and sign-out is now per-device. If someone still sees a loop, have them clear the site's cookies once (the old broken session lives in their browser) and sign in again.
 

@@ -11,10 +11,10 @@ Last verified run: 2026-10-15 (Windows 11, Node 24, Chrome stable via Playwright
 | Type check | `npm run typecheck` | ✅ pass |
 | Lint | `npm run lint` | ✅ pass |
 | Production build | `npm run build` | ✅ pass (Next 16.4.1) |
-| Unit | `npm test` | ✅ **96 / 96** (9 files) |
+| Unit | `npm test` | ✅ **100 / 100** (10 files) |
 | Integration: live Open-Meteo | `npm run test:integration` | ✅ **2 / 2** — real HTTPS requests |
 | Integration: RLS / storage / schema (real Supabase) | `npm run test:integration` | ✅ **67 / 67** (69 total with the weather file; includes 2 live geocoding checks) |
-| Playwright E2E | `npm run e2e` | ✅ **27 / 27** — core flow (2), viewer flows (6), search + collapsible tree + status (5), locations (4), first-run onboarding (1), QR labels + audit log (7), sessions (2) |
+| Playwright E2E | `npm run e2e` | ✅ **31 / 31** — core flow (2), viewer flows (7), search + collapsible tree + status (5), locations (4), first-run onboarding (1), QR labels + audit log (7), sessions (2), phone layout (3) |
 
 E2E specs clean up the rows they create (`e2e/cleanup.ts`, service-role key); a full run leaves the database at its seed state (verified by row counts).
 Not covered by automated tests: direct HTTP tests of every route, mobile layout, the pan tool (drag to scroll), email-confirmation sign-up flow, upload rejection paths (non-PDF, >25 MB) in the browser.
@@ -43,6 +43,8 @@ the older assertions in this paragraph still apply: search by location / name / 
 case-insensitive partial and multi-word matching; the seeded critical HPU with an open high issue making the press show "Inoperable (inherited)" in the list, detail banner,
 sub-machine list and dashboard; the cause machine's own notice; creating a sub-machine from its parent (parent pre-selected, critical checkbox disabled until a parent is chosen),
 raising a high issue → parent banner names it, resolving → banner clears; Viewer sees the state but no add/edit controls (with positive controls so absence checks are not vacuous).
+`e2e/mobile.spec.ts` (375x812 touch device): the notes panel is **closed by default**; a full-width, 44px-tall **Annotations tab** is docked at the bottom with the note count; every tool and control is on screen without scrolling the toolbar; tapping the tab opens a sheet **under half the screen** with the drawing still visible, tapping its header closes it; placing a pin by tapping keeps the new pin **above** the sheet; and **every page** (dashboard, machines, machine, new machine, labels, schematics, maintenance, teams, settings, locations, audit) fits the screen with no sideways scrolling, plus the hamburger menu. (Before the fix the panel was open by default at 320px and covered the screen.)
+`e2e/viewer-flows.spec.ts` also covers the desktop collapsed-panel tab and a failed document load recovering through **Try again**; `tests/unit/retry.test.ts` covers the one-shot retry helper.
 `e2e/session.spec.ts`: a browser holding a valid-looking token for a deleted/revoked account lands on the login page on every route (this test **failed with `net::ERR_TOO_MANY_REDIRECTS` before the fix**), and signing out on one device leaves the same account signed in on another.
 `tests/unit/qr.test.ts` decodes generated PNGs back to their URLs with a QR reader (jsQR) at several sizes; `e2e/qr-and-audit.spec.ts` covers label sheet and single label, the **PNG endpoint scanning back to the exact machine URL**, the signed-out scan -> sign in -> machine flow,
 endpoint protection (401 signed-out, 404 other organization / bad id), a Viewer's label sheet limited to visible machines, print media hiding the app chrome, the audit log showing create/update/delete with actor and `name: a -> b` changes, filters, CSV export, and **admin-only** access (manager/technician/viewer get 404 on the page, 403 on the export, no sidebar link; no write methods).

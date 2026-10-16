@@ -16,7 +16,7 @@ export async function cleanupE2eData() {
   if (issueIds.length) await admin.from("maintenance_issues").delete().in("id", issueIds);
 
   // annotations created by viewer-flows / annotation-flow
-  for (const pattern of ["Box %: coil overheating", "Callout %: verify 24 VDC", "E2E pinned note%"]) {
+  for (const pattern of ["Box %: coil overheating", "Callout %: verify 24 VDC", "E2E pinned note%", "E2E mobile%"]) {
     await admin.from("annotations").delete().ilike("body", pattern);
   }
 

@@ -119,7 +119,7 @@ export function AppShell({ children, user, role, orgId, orgs }: Props) {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden print:block print:h-auto print:overflow-visible">
+    <div className="flex h-dvh overflow-hidden print:block print:h-auto print:overflow-visible">
       <aside
         className={cn(
           "hidden shrink-0 border-r bg-sidebar text-sidebar-foreground transition-[width] md:block print:hidden",

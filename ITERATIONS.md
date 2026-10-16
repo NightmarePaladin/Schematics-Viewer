@@ -129,3 +129,17 @@ Report: "our Vercel site has a redirect error".
 | 49 | An audit test assumed a user could never have viewed a private schematic, but an earlier legitimate E2E grant had created such a (permanent) entry | compares counts before/after (history is immutable by design) |
 Cost: one extra Auth-server round trip per page navigation.
 Verified: 96 unit, 69 integration, 27 Playwright (production server) pass.
+
+## Iteration 13 — mobile viewer (2026-10-16)
+Report: "the schematics viewer is not mobile friendly at all; the box on the right to leave comments takes up the whole screen." Then: "turn the annotations into a tab the user can press to expand when they need it."
+Reproduced first with a 375px touch test: the 320px-wide panel was open by default and covered the drawing (which also shrank to 41%), and the one-row toolbar was cut off.
+| # | Finding | Fix |
+|---|---------|-----|
+| 50 | Panel open by default and 320px wide on every screen size | desktop side panel unchanged; on phones a **bottom tab** ("Annotations (n)") that pulls up a sheet under half the screen; closed by default |
+| 51 | First attempt put the annotation tools in a scrolling toolbar row, hiding them off-screen (found in a screenshot, not by a failing assertion) | toolbar wraps into two rows on phones; the test asserts every control is fully in the viewport |
+| 52 | The pin would have been hidden behind the sheet | a new draft pin is scrolled into the visible upper area; scroller gets bottom padding while the sheet is open |
+| 53 | Small touch targets (28px buttons, 22px pins) | 40px toolbar buttons on phones, 22px invisible tap target around pins, 44px tab; `100dvh` app shell |
+| 54 | My test pin polluted the demo drawing between runs and the next run tapped it instead of creating a new one | cleanup pattern added; the spec cleans before and after |
+| 55 | Desktop collapse left no visible way back except a small icon | slim vertical "Annotations" tab on the right edge when collapsed |
+| 56 | **Intermittent failure seen in 2 of ~6 full runs:** the viewer showed "Could not open this schematic: Could not evaluate permissions" once, seconds after the same call had worked. Cause not proven: 72 concurrent identical requests all succeeded, no error recurred in 3 later runs, and the database/auth health checks were normal, so a brief hiccup of the shared free-tier backend under heavy test load is the likely explanation | the underlying database error is now always logged server-side; the read-only permission lookup is retried once; the viewer shows **Try again** (tested by forcing a first-call failure) instead of a dead end |
+Verified: 100 unit, 69 integration, 31 Playwright (production server) pass; screenshots checked for the closed tab, the open sheet and the pin-placement state.

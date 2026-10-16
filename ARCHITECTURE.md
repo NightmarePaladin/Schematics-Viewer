@@ -22,6 +22,11 @@ Open-Meteo  ◄── src/lib/weather.ts (server-side only, via /api/weather)
 enforcement boundary and the Route Handlers add precise status codes (401/403/404/409/422). The service-role key is used only
 by `scripts/` and test fixtures.
 
+## Responsive viewer
+`SchematicViewer` uses `useSyncExternalStore` on `(min-width: 768px)` (server snapshot = desktop, so server HTML never flashes the phone sheet open; the sheet is also CSS-hidden until opened). Desktop: side panel (`sidebar` state) with a collapsed rail tab. Phone: `sheet` state, a bottom tab and a `46dvh` bottom sheet; the scroller gets bottom padding while the sheet is open and a new draft pin is scrolled into the visible upper area.
+The toolbar wraps into two rows on a phone (no hidden, scroll-only controls) and uses 40px touch targets; point markers have a 22px invisible tap target; the app shell uses `100dvh` so mobile browser bars do not clip it.
+A failed document load shows the reason with a **Try again** button, and the read-only permission lookup behind it is retried once on the server (`src/lib/retry.ts`).
+
 ## Sessions
 `src/proxy.ts` refreshes the Supabase session and gates pages. It decides "signed in" with `auth.getUser()` (validated by the Auth server), the same check the pages use, so the two can never disagree.
 (Using the locally-checked token alone caused an infinite `/login` <-> `/` redirect for a browser whose session had been revoked or whose user was deleted: the token still looked valid to the proxy, but the pages saw no user.)

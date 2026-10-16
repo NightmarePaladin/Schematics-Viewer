@@ -201,7 +201,37 @@ test("viewer controls: page navigation, fit modes, annotation toggle, sidebar co
   await page.getByTestId("toggle-annotations").click();
   await expect(markers.first()).toBeVisible();
 
+  await expect(page.getByTestId("annotations-rail")).toHaveCount(0); // not shown while the panel is open
+  await page.getByRole("button", { name: "Collapse annotations panel" }).click();
+  await expect(page.getByTestId("annotation-sidebar")).toHaveCount(0);
+  // a slim tab stays on the right edge so the panel is one click away
+  const rail = page.getByTestId("annotations-rail");
+  await expect(rail).toBeVisible();
+  await expect(rail).toContainText("Annotations");
+  await rail.click();
+  await expect(page.getByTestId("annotation-sidebar")).toBeVisible();
+  await expect(rail).toHaveCount(0);
   await page.getByRole("button", { name: "Collapse annotations panel" }).click();
   await expect(page.getByTestId("annotation-sidebar")).toHaveCount(0);
   await page.screenshot({ path: "test-results/flow-viewer-readonly.png" });
+});
+
+test("a failed load shows a clear message and a Try again button that recovers", async ({ page }) => {
+  await signIn(page, "tech@schematichub.test");
+  let calls = 0;
+  await page.route("**/api/schematics/*/file", (route) => {
+    calls += 1;
+    if (calls === 1) {
+      return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: { code: "db_error", message: "Could not evaluate permissions." } }) });
+    }
+    return route.continue();
+  });
+  await page.goto("/schematics");
+  await page.getByRole("link", { name: /Hydraulic Power Unit \(demo\)/ }).click();
+  const problem = page.getByRole("alert").filter({ hasText: "Could not open this schematic" });
+  await expect(problem).toContainText("Could not evaluate permissions");
+  await page.getByTestId("retry-load").click();
+  await canvasReady(page);
+  await expect(problem).toHaveCount(0);
+  expect(calls).toBe(2);
 });
