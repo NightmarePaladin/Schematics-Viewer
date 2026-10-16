@@ -35,6 +35,36 @@ const humanize = (s: string) => s.replace(/[._]/g, " ").trim();
 /** The part after the last dot, e.g. "machine.updated" -> "updated". */
 export const actionVerb = (action: string): string => action.split(".").pop() ?? action;
 
+/** Names for ids, used only for entries recorded before the log captured names at the time of the event. */
+export interface AuditNames {
+  users: Map<string, string>;
+  groups: Map<string, string>;
+  schematics: Map<string, string>;
+}
+export const noNames = (): AuditNames => ({ users: new Map(), groups: new Map(), schematics: new Map() });
+
+const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Who an access-related entry is about: the recorded name, else a live lookup, else "a deleted ...". */
+function personOrGroup(m: Record<string, unknown>, names: AuditNames): { label: string; kind: "person" | "group" } {
+  const groupId = str(m.group_id);
+  if (groupId || m.grantee_kind === "group") {
+    const label = str(m.grantee) ?? (groupId ? names.groups.get(groupId) : null) ?? "a deleted group";
+    return { label, kind: "group" };
+  }
+  const userId = str(m.user_id);
+  return { label: str(m.grantee) ?? (userId ? names.users.get(userId) : null) ?? "a deleted user", kind: "person" };
+}
+const memberOf = (m: Record<string, unknown>, names: AuditNames): string => {
+  const id = str(m.user_id);
+  return str(m.member) ?? (id ? names.users.get(id) : null) ?? "a deleted user";
+};
+const schematicOf = (m: Record<string, unknown>, names: AuditNames): string | null => {
+  const id = str(m.schematic_id);
+  return str(m.schematic) ?? (id ? (names.schematics.get(id) ?? "a deleted schematic") : null);
+};
+
 type Changes = Record<string, { from?: string; to?: string }>;
 
 export function changesOf(e: Pick<AuditEvent, "metadata">): Changes {
@@ -43,17 +73,47 @@ export function changesOf(e: Pick<AuditEvent, "metadata">): Changes {
 }
 
 /** One-line description of what was done, and the details of what changed. */
-export function describeEvent(e: AuditEvent): { title: string; detail: string } {
+export function describeEvent(e: AuditEvent, names: AuditNames = noNames()): { title: string; detail: string } {
+  const m = e.metadata ?? {};
+  const verbWord = actionVerb(e.action);
+  const changes = Object.entries(changesOf(e)).map(([key, ch]) => `${humanize(key)}: ${ch.from ?? "—"} → ${ch.to ?? "—"}`);
+
+  // access changes say WHO gained or lost access and to WHAT
+  if (e.entity_type === "grant" && ["created", "updated", "deleted"].includes(verbWord)) {
+    const who = personOrGroup(m, names);
+    const subject = who.kind === "group" ? `${who.label} (group)` : who.label;
+    const level = str(m.level);
+    const sch = schematicOf(m, names);
+    const title =
+      verbWord === "created" ? `Gave ${subject}${level ? ` ${cap(level)}` : ""} access`
+      : verbWord === "deleted" ? `Took away ${level ? `${cap(level)} ` : ""}access from ${subject}`
+      : `Changed access for ${subject}`;
+    return { title, detail: [sch ? `on “${sch}”` : null, ...changes].filter(Boolean).join("; ") };
+  }
+  if (e.entity_type === "membership" && ["created", "updated", "deleted"].includes(verbWord)) {
+    const who = memberOf(m, names);
+    const role = str(m.role);
+    const title =
+      verbWord === "created" ? `Added ${who} to the organization${role ? ` as ${humanize(role)}` : ""}`
+      : verbWord === "deleted" ? `Removed ${who} from the organization${role ? ` (was ${humanize(role)})` : ""}`
+      : `Changed the role of ${who}`;
+    return { title, detail: changes.join("; ") };
+  }
+  if (e.entity_type === "group_member" && ["created", "deleted"].includes(verbWord)) {
+    const who = memberOf(m, names);
+    const gid = str(m.group_id);
+    const group = str(m.group) ?? (gid ? (names.groups.get(gid) ?? "a deleted group") : "a group");
+    return { title: verbWord === "created" ? `Added ${who} to group “${group}”` : `Removed ${who} from group “${group}”`, detail: "" };
+  }
+
   const noun = (ENTITY_LABELS[e.entity_type] ?? humanize(e.entity_type)).toLowerCase();
-  const verb = VERBS[actionVerb(e.action)];
-  const label = typeof e.metadata?.label === "string" ? e.metadata.label : null;
+  const verb = VERBS[verbWord];
+  const label = typeof m.label === "string" ? m.label : null;
   // events recorded before the trigger-based log used names like "machine.create"; show them plainly
   const title = verb ? `${verb} ${noun}${label ? ` “${label}”` : ""}` : `${humanize(e.action)}${label ? ` “${label}”` : ""}`;
 
-  const parts: string[] = [];
-  for (const [key, ch] of Object.entries(changesOf(e))) parts.push(`${humanize(key)}: ${ch.from ?? "—"} → ${ch.to ?? "—"}`);
+  const parts: string[] = [...changes];
   if (!parts.length) {
-    const m = e.metadata ?? {};
     for (const key of ["role", "level", "severity", "status", "entry_type", "page_number"] as const) {
       if (m[key] !== undefined) parts.push(`${humanize(key)}: ${String(m[key])}`);
     }
@@ -62,10 +122,16 @@ export function describeEvent(e: AuditEvent): { title: string; detail: string } 
 }
 
 /** In-app page for the thing an event is about, when one still makes sense. */
-export function eventLink(e: AuditEvent): string | null {
-  if (actionVerb(e.action) === "deleted") return null;
+export function eventLink(e: AuditEvent, names?: AuditNames): string | null {
   const m = e.metadata ?? {};
-  const str = (v: unknown) => (typeof v === "string" ? v : null);
+  // an access entry points at the drawing it was about, even after the grant itself is gone
+  if (e.entity_type === "grant") {
+    const sid = str(m.schematic_id);
+    if (!sid) return null;
+    if (names && !str(m.schematic) && !names.schematics.has(sid)) return null; // the schematic no longer exists
+    return `/schematics/${sid}`;
+  }
+  if (actionVerb(e.action) === "deleted") return null;
   switch (e.entity_type) {
     case "machine":
       return e.entity_id ? `/machines/${e.entity_id}` : null;
@@ -120,7 +186,7 @@ export function applyAuditFilters<Q extends Filterable<Q>>(query: Q, f: AuditFil
   if (f.actor) out = out.eq("actor_id", f.actor);
   if (f.from) out = out.gte("created_at", `${f.from}T00:00:00.000Z`);
   if (f.to) out = out.lte("created_at", `${f.to}T23:59:59.999Z`);
-  if (f.q) out = out.or(["action", "actor_label", "metadata->>label"].map((c) => `${c}.ilike.%${f.q}%`).join(","));
+  if (f.q) out = out.or(["action", "actor_label", "metadata->>label", "metadata->>grantee", "metadata->>member", "metadata->>schematic", "metadata->>group"].map((c) => `${c}.ilike.%${f.q}%`).join(","));
   return out;
 }
 
@@ -133,11 +199,11 @@ export function csvCell(value: unknown): string {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export function auditToCsv(events: AuditEvent[]): string {
+export function auditToCsv(events: AuditEvent[], names: AuditNames = noNames()): string {
   const header = ["time_utc", "actor", "action", "entity_type", "entity_id", "description", "details", "metadata_json"];
   const lines = [header.join(",")];
   for (const e of events) {
-    const d = describeEvent(e);
+    const d = describeEvent(e, names);
     lines.push(
       [e.created_at, e.actor_label ?? "", e.action, e.entity_type, e.entity_id ?? "", d.title, d.detail, JSON.stringify(e.metadata ?? {})]
         .map(csvCell)

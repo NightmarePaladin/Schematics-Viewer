@@ -143,3 +143,13 @@ Reproduced first with a 375px touch test: the 320px-wide panel was open by defau
 | 55 | Desktop collapse left no visible way back except a small icon | slim vertical "Annotations" tab on the right edge when collapsed |
 | 56 | **Intermittent failure seen in 2 of ~6 full runs:** the viewer showed "Could not open this schematic: Could not evaluate permissions" once, seconds after the same call had worked. Cause not proven: 72 concurrent identical requests all succeeded, no error recurred in 3 later runs, and the database/auth health checks were normal, so a brief hiccup of the shared free-tier backend under heavy test load is the likely explanation | the underlying database error is now always logged server-side; the read-only permission lookup is retried once; the viewer shows **Try again** (tested by forcing a first-call failure) instead of a dead end |
 Verified: 100 unit, 69 integration, 31 Playwright (production server) pass; screenshots checked for the closed tab, the open sheet and the pin-placement state.
+
+## Iteration 14 — audit log names who lost access (2026-10-16)
+Report: the log said "Deleted access grant" without saying whose access was removed; "it should show who had access taken away."
+| # | Finding | Fix |
+|---|---------|-----|
+| 57 | Grant entries stored only ids, and the page showed a generic "Deleted access grant" | migration 12: the trigger snapshots the person/group name, kind and drawing title (and the member for role / group-membership changes); the page words them as "Took away View access from <who> on “<drawing>”" |
+| 58 | Names could later change or vanish (renamed group, deleted user or drawing) and the log is permanent | names are captured at event time (tested: rename the group afterwards, the entry is unchanged) |
+| 59 | The 18 older entries have ids only, and the log cannot be rewritten by the app | the page looks the ids up at display time (a gone person/group/drawing shows as "a deleted ..."); I did NOT modify audit history; those older entries are not matched by name search |
+| 60 | A phone test hard-coded "1 annotation", but real people had added one to the demo drawing | the test compares against the real count from the API |
+Verified: 107 unit, 72 integration, 32 Playwright (production server) pass.

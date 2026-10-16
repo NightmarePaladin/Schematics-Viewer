@@ -11,10 +11,10 @@ Last verified run: 2026-10-15 (Windows 11, Node 24, Chrome stable via Playwright
 | Type check | `npm run typecheck` | ✅ pass |
 | Lint | `npm run lint` | ✅ pass |
 | Production build | `npm run build` | ✅ pass (Next 16.4.1) |
-| Unit | `npm test` | ✅ **100 / 100** (10 files) |
+| Unit | `npm test` | ✅ **107 / 107** (10 files) |
 | Integration: live Open-Meteo | `npm run test:integration` | ✅ **2 / 2** — real HTTPS requests |
-| Integration: RLS / storage / schema (real Supabase) | `npm run test:integration` | ✅ **67 / 67** (69 total with the weather file; includes 2 live geocoding checks) |
-| Playwright E2E | `npm run e2e` | ✅ **31 / 31** — core flow (2), viewer flows (7), search + collapsible tree + status (5), locations (4), first-run onboarding (1), QR labels + audit log (7), sessions (2), phone layout (3) |
+| Integration: RLS / storage / schema (real Supabase) | `npm run test:integration` | ✅ **70 / 70** (72 total with the weather file; includes 2 live geocoding checks) |
+| Playwright E2E | `npm run e2e` | ✅ **32 / 32** — core flow (2), viewer flows (7), search + collapsible tree + status (5), locations (4), first-run onboarding (1), QR labels + audit log (8), sessions (2), phone layout (3) |
 
 E2E specs clean up the rows they create (`e2e/cleanup.ts`, service-role key); a full run leaves the database at its seed state (verified by row counts).
 Not covered by automated tests: direct HTTP tests of every route, mobile layout, the pan tool (drag to scroll), email-confirmation sign-up flow, upload rejection paths (non-PDF, >25 MB) in the browser.
@@ -48,6 +48,7 @@ raising a high issue → parent banner names it, resolving → banner clears; Vi
 `e2e/session.spec.ts`: a browser holding a valid-looking token for a deleted/revoked account lands on the login page on every route (this test **failed with `net::ERR_TOO_MANY_REDIRECTS` before the fix**), and signing out on one device leaves the same account signed in on another.
 `tests/unit/qr.test.ts` decodes generated PNGs back to their URLs with a QR reader (jsQR) at several sizes; `e2e/qr-and-audit.spec.ts` covers label sheet and single label, the **PNG endpoint scanning back to the exact machine URL**, the signed-out scan -> sign in -> machine flow,
 endpoint protection (401 signed-out, 404 other organization / bad id), a Viewer's label sheet limited to visible machines, print media hiding the app chrome, the audit log showing create/update/delete with actor and `name: a -> b` changes, filters, CSV export, and **admin-only** access (manager/technician/viewer get 404 on the page, 403 on the export, no sidebar link; no write methods).
+`tests/integration/audit.test.ts` also proves access entries record the person/group, level and drawing at the time (and that a later rename does not rewrite them), and that role and group-membership changes name the member; `e2e/qr-and-audit.spec.ts` grants and revokes access for a person and a group through the API and checks the log reads "Took away Comment access from Vera Viewer (...)" / "Took away Edit access from Hydraulics Crew (group)" with the drawing and the admin who did it, links to the drawing, is searchable by name, and exports the same wording to CSV.
 `tests/integration/audit.test.ts` covers: automatic recording (annotation create/update/delete, issue resolution with status change, maintenance log, access grants, location changes), no-op updates and service-role changes **not** logged, file-view logging only for permitted users, reading limited to admins (managers/technicians/viewers/other organizations see nothing), and **append-only**: admins and every other role cannot insert/update/delete,
 and even the service-role key gets `permission denied`. The owner path was verified directly in the SQL editor: `postgres` may update, `service_role` and `authenticated` are blocked.
 `e2e/locations.spec.ts` covers: shared list visible to all members (Technician can add but sees no edit/delete, Viewer read-only, Admin positive control);
@@ -65,10 +66,10 @@ schematic is 404, the shared one is read-only, and direct API writes are refused
 
 ## How to run the credential-dependent tests
 
-1. Apply all eleven migrations in `supabase/migrations/` (README → Supabase setup). For a throw-away project, disable "Confirm email".
+1. Apply all twelve migrations in `supabase/migrations/` (README → Supabase setup). For a throw-away project, disable "Confirm email".
 2. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`.
 3. `npm run seed` (idempotent).
-4. `npm run test:integration` — 69 tests (67 RLS/storage/schema/hierarchy/locations/audit + 2 weather).
+4. `npm run test:integration` — 72 tests (70 RLS/storage/schema/hierarchy/locations/audit + 2 weather).
 5. **Most reliable:** `npm run build && npx next start -p 3100`, then `E2E_BASE_URL=http://localhost:3100 npm run e2e` (the dev server compiles on demand and can stall the PDF/sign-in steps under load — see ITERATIONS 10).
    Or simply `npm run e2e` — uses installed Chrome (`E2E_CHANNEL=chrome`, default). To use Playwright's bundled Chromium run `npx playwright install chromium` and set `E2E_CHANNEL=chromium`.
    Set `E2E_BASE_URL` to test a deployed URL instead of starting `npm run dev`.

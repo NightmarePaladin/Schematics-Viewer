@@ -4,6 +4,7 @@ import { Button, linkButton } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Empty, Page, PageHeader, selectClass } from "@/components/ui-bits";
 import { applyAuditFilters, describeEvent, ENTITY_LABELS, ENTITY_TYPES, eventLink, sanitizeFilters, type AuditEvent } from "@/lib/audit";
+import { loadAuditNames } from "@/lib/audit-names";
 import { requireOrgPage } from "@/lib/auth";
 
 export const metadata = { title: "Audit log" };
@@ -29,6 +30,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
     s.supabase.from("audit_events").select("actor_id, actor_label").eq("org_id", s.orgId).not("actor_id", "is", null).limit(2000),
   ]);
   const events = (data ?? []) as AuditEvent[];
+  const names = await loadAuditNames(s.supabase, events);
   const total = count ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -82,8 +84,8 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
             </thead>
             <tbody>
               {events.map((e) => {
-                const d = describeEvent(e);
-                const href = eventLink(e);
+                const d = describeEvent(e, names);
+                const href = eventLink(e, names);
                 return (
                   <tr key={e.id} className="border-t align-top">
                     <td className="whitespace-nowrap p-3 font-mono text-xs"><time dateTime={e.created_at}>{e.created_at.replace("T", " ").slice(0, 19)}</time></td>

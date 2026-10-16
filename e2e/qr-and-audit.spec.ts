@@ -154,6 +154,54 @@ test("audit log: admins see who did what, with changes, filters and a CSV export
   expect(body).toContain(renamed);
 });
 
+test("audit log shows WHO had access taken away, and from what", async ({ page }) => {
+  await signIn(page, "admin@schematichub.test");
+
+  // find the private schematic, a person and a group to work with (through the real API)
+  const schematics = (await (await page.request.get("/api/schematics")).json()).data as { id: string; title: string }[];
+  const target = schematics.find((s) => s.title === "Compressor control wiring (private)")!;
+  const members = (await (await page.request.get("/api/members")).json()).data as { user_id: string; profile: { email: string } | { email: string }[] }[];
+  const vera = members.find((m) => [m.profile].flat()[0]?.email === "viewer@schematichub.test")!;
+  const groups = (await (await page.request.get("/api/groups")).json()).data as { id: string; name: string }[];
+  const crew = groups.find((g) => g.name === "Hydraulics Crew")!;
+
+  // give access to a person and to a group, then take both away
+  for (const body of [{ user_id: vera.user_id, level: "comment" }, { group_id: crew.id, level: "edit" }]) {
+    const made = await page.request.post(`/api/schematics/${target.id}/grants`, { data: body });
+    expect(made.status()).toBe(201);
+    const grantId = (await made.json()).data.id as string;
+    expect((await page.request.delete(`/api/schematics/${target.id}/grants?grant_id=${grantId}`)).status()).toBe(204);
+  }
+
+  await page.goto("/audit?entity=grant");
+  const table = page.getByTestId("audit-table");
+  // the person
+  const person = table.getByRole("row").filter({ hasText: "Took away Comment access from Vera Viewer (viewer@schematichub.test)" }).first();
+  await expect(person).toContainText("on “Compressor control wiring (private)”");
+  await expect(person).toContainText("Ada Admin (admin@schematichub.test)"); // who did it
+  // the group
+  const group = table.getByRole("row").filter({ hasText: "Took away Edit access from Hydraulics Crew (group)" }).first();
+  await expect(group).toContainText("on “Compressor control wiring (private)”");
+  // and the grants are described when given, too
+  await expect(table.getByText("Gave Vera Viewer (viewer@schematichub.test) Comment access").first()).toBeVisible();
+  // the entry leads to the drawing it was about
+  await expect(person.getByRole("link", { name: /Took away Comment access/ })).toHaveAttribute("href", `/schematics/${target.id}`);
+
+  // no entry on the page still uses the old uninformative wording, including entries recorded before names were captured
+  await expect(page.getByText("Deleted access grant")).toHaveCount(0);
+  await expect(page.getByText("Created access grant")).toHaveCount(0);
+
+  // searchable by the person's or group's name
+  await page.goto("/audit?entity=grant&q=Hydraulics");
+  await expect(page.getByTestId("audit-table")).toContainText("Hydraulics Crew (group)");
+  await expect(page.getByTestId("audit-table")).not.toContainText("Vera Viewer");
+  await page.screenshot({ path: "test-results/flow-audit-access.png" });
+
+  // CSV says the same thing
+  const csv = await (await page.request.get("/api/audit/export?entity=grant&q=Vera")).text();
+  expect(csv).toContain("Took away Comment access from Vera Viewer (viewer@schematichub.test)");
+});
+
 test("audit log is admin-only: managers, technicians and viewers cannot see or export it", async ({ browser }) => {
   for (const email of ["manager@schematichub.test", "tech@schematichub.test", "viewer@schematichub.test"]) {
     const ctx = await browser.newContext();

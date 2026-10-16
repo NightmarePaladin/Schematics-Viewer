@@ -1,5 +1,6 @@
 import { forbidden, handler } from "@/lib/api";
 import { applyAuditFilters, auditToCsv, sanitizeFilters, type AuditEvent } from "@/lib/audit";
+import { loadAuditNames } from "@/lib/audit-names";
 import { requireOrg } from "@/lib/auth";
 
 const MAX_ROWS = 5000;
@@ -18,7 +19,8 @@ export const GET = handler(async (req) => {
     .limit(MAX_ROWS);
   const { data, error } = await applyAuditFilters(base, filters);
   if (error) throw new Error(error.message);
-  const csv = auditToCsv((data ?? []) as AuditEvent[]);
+  const events = (data ?? []) as AuditEvent[];
+  const csv = auditToCsv(events, await loadAuditNames(s.supabase, events));
   return new Response(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

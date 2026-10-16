@@ -29,7 +29,10 @@ _Last updated: 2026-10-15._
 - Decision to confirm with the project owner: "major" = severity high **or** critical (constant `MAJOR_SEVERITIES`; SQL function `inoperable_machines`).
 - Open item for the project owner: enable **leaked password protection** in Supabase Auth settings (advisor warning).
 
-## Mobile viewer (latest)
+## Audit wording (latest)
+- Access entries read e.g. "Took away View access from Hydraulics Crew (group) on “Compressor control wiring (private)”"; new entries snapshot the names (migration 12). Older entries (before 2026-10-16) show names via a live lookup and are not searchable by name. Audit history was not altered.
+
+## Mobile viewer
 - Phones: bottom "Annotations" tab -> sheet; two-row toolbar; desktop keeps the side panel with a collapsed-rail tab. Not yet tested on real devices or Safari/iOS (tests use Chrome's phone emulation at 375x812): worth a quick check on a real phone, especially pinch-zoom and the pin placement flow.
 - If "Could not open this schematic" appears, **Try again** retries; the server log now prints `[db_error]` / `[schematic_level]` with the real cause (Vercel -> project -> Logs).
 

@@ -118,6 +118,56 @@ describe.skipIf(!hasSupabaseCreds())("audit log (real Supabase)", () => {
     });
   });
 
+  describe("access changes record who they were about and what they applied to", () => {
+    it("a revoked grant names the person, the level and the drawing", async () => {
+      const g = await c.admin.from("schematic_access_grants").insert({ org_id: s.orgId, schematic_id: s.privateSchematicId, user_id: s.ids.viewer, level: "comment", granted_by: s.ids.admin }).select("id").single();
+      expect(g.error).toBeNull();
+      await c.admin.from("schematic_access_grants").delete().eq("id", g.data!.id);
+      const ev = await eventsFor(c.admin, g.data!.id);
+      expect(ev.map((e) => e.action)).toEqual(["grant.created", "grant.deleted"]);
+      for (const e of ev) {
+        expect(e.metadata).toMatchObject({
+          grantee: "Vera Viewer (viewer@schematichub.test)",
+          grantee_kind: "person",
+          schematic: "Compressor control wiring (private)",
+          schematic_id: s.privateSchematicId,
+          level: "comment",
+        });
+      }
+    });
+
+    it("the names are a snapshot: renaming the group afterwards does not rewrite history", async () => {
+      const grp = await c.manager.from("groups").insert({ org_id: s.orgId, name: `Night Crew ${stamp}`, created_by: s.ids.manager }).select("id").single();
+      expect(grp.error).toBeNull();
+      cleanup.push(() => service.from("groups").delete().eq("id", grp.data!.id));
+      const g = await c.admin.from("schematic_access_grants").insert({ org_id: s.orgId, schematic_id: s.privateSchematicId, group_id: grp.data!.id, level: "view", granted_by: s.ids.admin }).select("id").single();
+      expect(g.error).toBeNull();
+      await c.admin.from("schematic_access_grants").delete().eq("id", g.data!.id);
+      await c.manager.from("groups").update({ name: `Renamed Crew ${stamp}` }).eq("id", grp.data!.id);
+
+      const ev = await eventsFor(c.admin, g.data!.id);
+      const removed = ev.find((e) => e.action === "grant.deleted")!;
+      expect(removed.metadata).toMatchObject({ grantee: `Night Crew ${stamp}`, grantee_kind: "group", group_id: grp.data!.id, level: "view" });
+    });
+
+    it("group membership and organization role changes name the person", async () => {
+      const grp = await c.manager.from("groups").insert({ org_id: s.orgId, name: `Shift ${stamp}`, created_by: s.ids.manager }).select("id").single();
+      cleanup.push(() => service.from("groups").delete().eq("id", grp.data!.id));
+      await c.manager.from("group_memberships").insert({ group_id: grp.data!.id, user_id: s.ids.tech2, org_id: s.orgId });
+      await c.manager.from("group_memberships").delete().eq("group_id", grp.data!.id).eq("user_id", s.ids.tech2);
+      const { data: gm } = await c.admin.from("audit_events").select("action, metadata").eq("entity_type", "group_member").contains("metadata", { group_id: grp.data!.id }).order("id");
+      expect(gm!.map((e) => e.action)).toEqual(["group_member.created", "group_member.deleted"]);
+      expect(gm![1].metadata).toMatchObject({ member: "Theo Technician (tech2@schematichub.test)", group: `Shift ${stamp}` });
+
+      const up = await c.admin.rpc("add_member_by_email", { p_org: s.orgId, p_email: USERS.tech2.email, p_role: "maintenance_manager" });
+      expect(up.error).toBeNull();
+      await c.admin.rpc("add_member_by_email", { p_org: s.orgId, p_email: USERS.tech2.email, p_role: "technician" });
+      const { data: mem } = await c.admin.from("audit_events").select("action, metadata").eq("entity_type", "membership").eq("action", "membership.updated").contains("metadata", { user_id: s.ids.tech2 }).order("id", { ascending: false }).limit(2);
+      expect(mem![1].metadata).toMatchObject({ member: "Theo Technician (tech2@schematichub.test)" });
+      expect(mem![1].metadata.changes.role).toEqual({ from: "technician", to: "maintenance_manager" });
+    });
+  });
+
   describe("who can read it", () => {
     it("organization admins can read their organization's log", async () => {
       const { data, error } = await c.admin.from("audit_events").select("id").eq("org_id", s.orgId).limit(5);

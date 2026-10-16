@@ -16,7 +16,7 @@ maintenance records to exact coordinates on a drawing page.
 | 2 | Persistent database | Supabase PostgreSQL: 13 tables, FKs, indexes, RLS, triggers — `supabase/migrations/*.sql`, described in [DATABASE.md](DATABASE.md). Private Storage bucket for PDFs. |
 | 3 | Real external API | Open-Meteo **weather** (`src/lib/weather.ts` via `GET /api/weather`) and Open-Meteo **geocoding** (`src/lib/geocode.ts` via `GET /api/geocode`, fills location coordinates from a place name). 5 s timeout, 10 min cache, fallback states. Verified by a live-network test (`tests/integration/weather-live.test.ts`). |
 | 4 | New technology / novel use case | PDF.js rendering with an SVG annotation layer using **normalized, rotation-aware page coordinates** (`src/lib/coords.ts`); RLS-enforced document ACL with user + group grants resolved in SQL and mirrored in storage policies; signed-URL-only delivery. |
-| 5 | Iterate and test | Unit tests (100), live-network tests (4), RLS/storage/hierarchy/location/audit integration tests (67), Playwright E2E (31), and a candid change log in [ITERATIONS.md](ITERATIONS.md). Results in [TESTING.md](TESTING.md). |
+| 5 | Iterate and test | Unit tests (107), live-network tests (4), RLS/storage/hierarchy/location/audit integration tests (67), Playwright E2E (32), and a candid change log in [ITERATIONS.md](ITERATIONS.md). Results in [TESTING.md](TESTING.md). |
 
 ## Quick start
 
@@ -33,12 +33,12 @@ Without `.env.local` the app still starts and shows a `/setup` page explaining w
 1. Create a project at <https://supabase.com> (or use an existing one).
 2. **Project Settings → API**: copy the project URL and the `anon`/publishable key into `.env.local`
    (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`).
-3. Apply the migrations **in order (11 files)** — either paste each file into **SQL Editor → Run**, or with the CLI:
+3. Apply the migrations **in order (12 files)** — either paste each file into **SQL Editor → Run**, or with the CLI:
    ```bash
    npx supabase link --project-ref <your-ref>
    npx supabase db push
    ```
-   Files: `20261015000001_schema.sql`, `20261015000002_functions_rls.sql`, `20261015000003_storage.sql`, `20261015000004_fk_indexes.sql`, `20261015000005_machines_select_returning_fix.sql`, `20261015000006_protect_admins.sql`, `20261015000007_machine_hierarchy.sql`, `20261015000008_critical_components.sql`, `20261015000009_locations.sql`, `20261015000010_critical_faults.sql`, `20261015000011_audit_log.sql`.
+   Files: `20261015000001_schema.sql`, `20261015000002_functions_rls.sql`, `20261015000003_storage.sql`, `20261015000004_fk_indexes.sql`, `20261015000005_machines_select_returning_fix.sql`, `20261015000006_protect_admins.sql`, `20261015000007_machine_hierarchy.sql`, `20261015000008_critical_components.sql`, `20261015000009_locations.sql`, `20261015000010_critical_faults.sql`, `20261015000011_audit_log.sql`, `20261015000012_audit_who_and_what.sql`.
 4. **Authentication → Providers → Email**: for quick local demos turn **off** “Confirm email” (otherwise new users must
    click an emailed link first). **Authentication → URL Configuration**: add `http://localhost:3000/**` and your Vercel URL
    as redirect URLs.
@@ -67,7 +67,7 @@ Without `.env.local` the app still starts and shows a `/setup` page explaining w
 9. **QR labels.** On a machine page click **QR label** (or **QR labels** on the Machines list for a whole sheet), then **Print**. The sticker shows a QR code plus the name, model, serial number and location in text.
    Scanning it opens that machine's page; signed-out people are sent to sign in and then straight to the machine. The code contains only the page URL (no data). On Vercel, labels always point at the production domain.
 10. **Audit log** (admins only, sidebar → *Audit log*): who did what and when, for every change by a signed-in user (machines, locations, schematics, access grants, annotations, replies, issues and their status changes, maintenance logs, members and groups, plus who viewed a schematic file).
-   Filter by type, person, date or text; export to CSV. It is written by database triggers, readable only by organization admins, and **append-only: nobody can edit or delete entries through the app or even with the service-role key; only the database owner (Supabase `postgres`) can**.
+   Access changes say exactly **who gained or lost access and to what** (for example "Took away View access from Hydraulics Crew (group) on “Compressor control wiring”"); role and group-membership changes name the person too. Filter by type, person, date or text (names included); export to CSV. It is written by database triggers, readable only by organization admins, and **append-only: nobody can edit or delete entries through the app or even with the service-role key; only the database owner (Supabase `postgres`) can**.
 11. **Phones and tablets.** On a phone the schematic viewer gives the drawing the whole screen. The annotations live in a tab docked at the bottom ("Annotations", with a count): tap it to pull up a sheet (under half the screen, so the drawing stays visible), tap its header to tuck it away. Every tool sits in a two-row toolbar with finger-sized buttons, and a newly placed pin is scrolled into view above the sheet. On a desktop the panel stays at the side and collapses to a slim tab on the right edge.
 12. **Systems and sub-machines:** when registering/editing a machine pick *Part of* (parent). Tick **Critical component** on a sub-machine: while it has an
    unresolved **high or critical** issue, its parent is shown as **Inoperable (inherited)** (list, detail, dashboard) until the issue is resolved.

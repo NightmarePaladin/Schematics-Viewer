@@ -10,11 +10,12 @@ Migrations (apply in order) live in `supabase/migrations/`:
 6. `20261015000006_protect_admins.sql` — admins cannot lower their own role; an organization can never lose its last admin (trigger)
 7. `20261015000007_machine_hierarchy.sql` — `machines.parent_id` (composite FK, same organization), no self/loop parents, depth limit 10
 8. `20261015000008_critical_components.sql` — `machines.is_critical` and `inoperable_machines(org)` (derived inherited state)
+12. `20261015000012_audit_who_and_what.sql` — access, role and group-membership entries record the person/group and the drawing as a permanent snapshot
 11. `20261015000011_audit_log.sql` — trigger-based, admin-readable, append-only audit log
 10. `20261015000010_critical_faults.sql` — `critical_fault_machines(org)`: machines with their own unresolved critical-severity issue (derived)
 9. `20261015000009_locations.sql` — `locations` table, `machines.location_id`, name-sync triggers, RLS, conversion of existing free-text locations
 
-> **Status:** all eleven migrations were applied successfully to Supabase project `pmtdaopxvisqwyhaenvz` on 2026-10-15 (no SQL errors).
+> **Status:** all twelve migrations were applied successfully to Supabase project `pmtdaopxvisqwyhaenvz` on 2026-10-15 (no SQL errors).
 > Supabase security advisor: 11 WARN `authenticated_security_definer_function_executable` — **intentional**: the RLS helper functions and the two RPCs
 > must be callable by signed-in users (the API calls `schematic_level` and the RPCs as the user); they only reveal the caller's own access.
 > Performance advisor: composite-FK indexes added in migration 4; remaining INFO "unused index" notices are expected on an empty database.
@@ -87,6 +88,8 @@ All helper functions are `SECURITY DEFINER` with `search_path = ''`, executable 
   (the roles behind the Supabase SQL editor). Cascades from deleting an organization run as the table owner and are allowed.
 - **Owner maintenance** (Supabase dashboard → SQL editor, which runs as `postgres`). Example: remove entries made by the demo/test accounts:
   `delete from public.audit_events where actor_label ilike '%@schematichub.test%';` (this is destructive and is itself not logged).
+- **Who/what snapshot (migration 12):** `grant` entries carry `grantee` (person "Name (email)" or group name), `grantee_kind` and `schematic` (title); `membership` entries carry `member`; `group_member` entries carry `member` and `group`. They are captured when the event happens, so renaming or deleting the person, group or drawing later never changes what the log says.
+  Entries recorded before migration 12 have only ids; the admin page resolves their names from the ids when it draws the page (a deleted user/group/schematic is shown as "a deleted ..."). History itself was not modified. Name search only matches entries that carry the snapshot.
 - Entries written before migration 11 by the old app-level logger remain (action names like `machine.create`); they are displayed as-is.
 
 ## Locations

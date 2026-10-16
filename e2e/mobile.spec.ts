@@ -56,7 +56,11 @@ test("viewer on a phone: the drawing fills the screen and the notes panel stays 
   await expect(tab).toBeVisible();
   await expect(tab).toHaveAttribute("aria-expanded", "false");
   await expect(tab).toContainText("Annotations");
-  await expect(tab).toContainText("1"); // how many notes are waiting
+  // the badge shows how many notes there are (compared with the real count: people may have added annotations to the demo drawing)
+  const schematicId = page.url().match(/schematics\/([0-9a-f-]{36})/)![1];
+  const count = ((await (await page.request.get(`/api/annotations?schematic_id=${schematicId}`)).json()).data as unknown[]).length;
+  expect(count).toBeGreaterThan(0);
+  await expect(tab).toContainText(String(count));
   const tb = (await tab.boundingBox())!;
   expect(tb.height).toBeGreaterThanOrEqual(44);
   expect(tb.width).toBeGreaterThanOrEqual(360);
