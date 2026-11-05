@@ -19,7 +19,11 @@ export const PATCH = handler<Ctx>(async (req, ctx) => {
   if (Object.keys(patch).length === 0) throw new ApiError(422, "empty_patch", "Nothing to update.");
   const { data: existing } = await s.supabase.from("annotations").select("id").eq("id", id).maybeSingle();
   if (!existing) throw notFound("Annotation");
-  const { data, error } = await s.supabase.from("annotations").update(patch).eq("id", id).select().maybeSingle();
+  // Removing a link also discards any "link broken" note; a replacement link is validated (and the note cleared) by the database.
+  const update = patch.linked_schematic_id === null
+    ? { ...patch, linked_page: null, linked_annotation_id: null, link_broken_at: null, link_broken_by: null, link_broken_note: null }
+    : patch;
+  const { data, error } = await s.supabase.from("annotations").update(update).eq("id", id).select().maybeSingle();
   if (error) throw fromDbError(error);
   if (!data) throw new ApiError(403, "forbidden", "You can only edit your own annotations unless you have Edit access.");
   return NextResponse.json({ data });

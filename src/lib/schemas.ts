@@ -19,7 +19,7 @@ const optionalNumber = (min: number, max: number) =>
 export const MACHINE_STATUSES = ["operational", "degraded", "down", "maintenance", "retired"] as const;
 export const ISSUE_STATUSES = ["open", "in_progress", "resolved"] as const;
 export const SEVERITIES = ["low", "medium", "high", "critical"] as const;
-export const ANNOTATION_TYPES = ["point", "comment", "box", "callout"] as const;
+export const ANNOTATION_TYPES = ["point", "comment", "box", "callout", "pen", "arrow", "highlight"] as const;
 export const LOG_TYPES = ["inspection", "repair", "calibration", "note"] as const;
 
 /** Fields without defaults: safe to `.partial()` for updates (a default would silently overwrite stored values). */
@@ -118,9 +118,17 @@ export const annotationCreateSchema = z
     height: norm.nullish(),
     body: z.string().trim().max(4000).default(""),
     status: z.enum(ISSUE_STATUSES).nullish(),
+    linked_schematic_id: z.string().uuid().nullish(),
+    linked_page: z.number().int().min(1).nullish(),
+    linked_annotation_id: z.string().uuid().nullish(),
+    path: z.array(z.tuple([norm, norm])).min(2).max(600).nullish(),
   })
   .superRefine((a, ctx) => {
-    const needsSize = a.type === "box" || a.type === "callout";
+    const needsPath = a.type === "pen" || a.type === "arrow";
+    if (needsPath && !a.path) ctx.addIssue({ code: "custom", path: ["path"], message: `${a.type} needs a path` });
+    if (a.type === "arrow" && a.path && a.path.length !== 2) ctx.addIssue({ code: "custom", path: ["path"], message: "arrow needs exactly two points" });
+    if (!needsPath && a.path) ctx.addIssue({ code: "custom", path: ["path"], message: `${a.type} annotations have no path` });
+    const needsSize = a.type === "box" || a.type === "callout" || a.type === "highlight";
     if (needsSize) {
       if (!a.width || !a.height || a.width <= 0 || a.height <= 0) {
         ctx.addIssue({ code: "custom", path: ["width"], message: `${a.type} needs positive width and height` });
@@ -142,6 +150,9 @@ export const annotationUpdateSchema = z.object({
   y: norm.optional(),
   width: norm.optional(),
   height: norm.optional(),
+  linked_schematic_id: z.string().uuid().nullable().optional(),
+  linked_page: z.number().int().min(1).nullable().optional(),
+  linked_annotation_id: z.string().uuid().nullable().optional(),
 });
 
 export const replyCreateSchema = z.object({

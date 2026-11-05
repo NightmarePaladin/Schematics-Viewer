@@ -45,6 +45,33 @@ describe("annotation payload validation", () => {
     expect(annotationCreateSchema.safeParse({ ...base, type: "point", x: 0.5, y: 0.25 }).success).toBe(true);
   });
 
+  it("accepts an optional schematic link and rejects a non-uuid one", () => {
+    const id = "6f1c2b9e-3b4a-4c7e-9d51-0a8f2e7c1b33";
+    expect(annotationCreateSchema.safeParse({ ...base, type: "point", x: 0.5, y: 0.5, linked_schematic_id: id }).success).toBe(true);
+    expect(annotationCreateSchema.safeParse({ ...base, type: "point", x: 0.5, y: 0.5, linked_schematic_id: null }).success).toBe(true);
+    expect(annotationCreateSchema.safeParse({ ...base, type: "point", x: 0.5, y: 0.5, linked_schematic_id: "nope" }).success).toBe(false);
+  });
+
+  it("pen and arrow need a path; highlight needs a size", () => {
+    const pen = { ...base, type: "pen", x: 0.1, y: 0.1 };
+    expect(annotationCreateSchema.safeParse(pen).success).toBe(false);
+    expect(annotationCreateSchema.safeParse({ ...pen, path: [[0.1, 0.1], [0.2, 0.3], [0.3, 0.3]] }).success).toBe(true);
+    expect(annotationCreateSchema.safeParse({ ...pen, type: "arrow", path: [[0.1, 0.1], [0.2, 0.3], [0.3, 0.3]] }).success).toBe(false);
+    expect(annotationCreateSchema.safeParse({ ...pen, type: "arrow", path: [[0.1, 0.1], [0.4, 0.4]] }).success).toBe(true);
+    expect(annotationCreateSchema.safeParse({ ...pen, path: [[0.1, 0.1], [2, 3]] }).success).toBe(false);
+    expect(annotationCreateSchema.safeParse({ ...base, type: "point", x: 0.5, y: 0.5, path: [[0.1, 0.1], [0.2, 0.2]] }).success).toBe(false);
+    expect(annotationCreateSchema.safeParse({ ...base, type: "highlight", x: 0.1, y: 0.1 }).success).toBe(false);
+    expect(annotationCreateSchema.safeParse({ ...base, type: "highlight", x: 0.1, y: 0.1, width: 0.2, height: 0.05 }).success).toBe(true);
+  });
+
+  it("link targets: page and annotation are validated", () => {
+    const id = "6f1c2b9e-3b4a-4c7e-9d51-0a8f2e7c1b33";
+    const pt = { ...base, type: "point", x: 0.5, y: 0.5, linked_schematic_id: id };
+    expect(annotationCreateSchema.safeParse({ ...pt, linked_page: 3, linked_annotation_id: id }).success).toBe(true);
+    expect(annotationCreateSchema.safeParse({ ...pt, linked_page: 0 }).success).toBe(false);
+    expect(annotationCreateSchema.safeParse({ ...pt, linked_annotation_id: "nope" }).success).toBe(false);
+  });
+
   it("rejects pixel-like coordinates", () => {
     expect(annotationCreateSchema.safeParse({ ...base, type: "point", x: 340, y: 120 }).success).toBe(false);
   });

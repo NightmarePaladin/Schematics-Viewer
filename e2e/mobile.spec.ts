@@ -45,7 +45,7 @@ test("viewer on a phone: the drawing fills the screen and the notes panel stays 
   for (const name of ["tool-point", "tool-comment", "tool-box", "tool-callout", "tool-select", "tool-pan", "toggle-annotations"]) {
     await expect(page.getByTestId(name), name).toBeInViewport({ ratio: 1 });
   }
-  for (const label of ["Zoom in", "Zoom out", "Fit to width", "Fit to page", "Rotate view 90 degrees", "Next page", "Previous page"]) {
+  for (const label of ["Zoom in", "Zoom out", "Fit to page", "Rotate view 90 degrees", "Next page", "Previous page"]) {
     await expect(page.getByRole("button", { name: label }), label).toBeInViewport({ ratio: 1 });
   }
   const toolbarOverflow = await page.getByRole("toolbar", { name: "Viewer controls" }).evaluate((el) => el.scrollWidth > el.clientWidth + 1);

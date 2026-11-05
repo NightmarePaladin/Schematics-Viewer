@@ -18,7 +18,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
+import { NotificationBell } from "@/components/notification-bell";
 import { Button } from "@/components/ui/button";
+import { clearOffline } from "@/lib/offline";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -34,7 +36,7 @@ const ADMIN_NAV = [{ href: "/audit", label: "Audit log", icon: ScrollText }];
 
 interface Props {
   children: React.ReactNode;
-  user: { name: string; email: string };
+  user: { id: string; name: string; email: string };
   role: string;
   orgId: string;
   orgs: { org_id: string; org_name: string }[];
@@ -49,6 +51,8 @@ export function AppShell({ children, user, role, orgId, orgs }: Props) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // offline support: keeps the shell and the last drawings available on a weak connection (production only)
+    if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
     setMounted(true);
     try {
       setCollapsed(localStorage.getItem("sh_sidebar") === "1");
@@ -108,7 +112,17 @@ export function AppShell({ children, user, role, orgId, orgs }: Props) {
           <div className="truncate">{user.email}</div>
           <div className="mt-0.5 capitalize">{role.replace("_", " ")}</div>
         </div>
-        <form action="/auth/signout" method="post">
+        <form
+          action="/auth/signout"
+          method="post"
+          onSubmit={async (e) => {
+            // private drawings cached for offline use must not outlive the session on a shared device
+            e.preventDefault();
+            const form = e.currentTarget;
+            await clearOffline();
+            form.submit();
+          }}
+        >
           <Button type="submit" variant="ghost" size="sm" className="mt-1 w-full justify-start">
             <span className={cn(collapsed && "md:sr-only")}>Sign out</span>
             {collapsed && <span className="hidden md:inline">⏻</span>}
@@ -151,6 +165,7 @@ export function AppShell({ children, user, role, orgId, orgs }: Props) {
             {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
           </Button>
           <div className="ml-auto flex items-center gap-2">
+            <NotificationBell userId={user.id} />
             {orgs.length > 1 ? (
               <select
                 aria-label="Organization"

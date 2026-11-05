@@ -177,9 +177,11 @@ test("rotating the view keeps annotations on the same drawing features", async (
 test("viewer controls: page navigation, fit modes, annotation toggle, sidebar collapse", async ({ page }) => {
   await signIn(page, "viewer@schematichub.test");
   await openSchematic(page, /Hydraulic Power Unit \(demo\)/);
-  await expect(page.getByTestId("page-indicator")).toContainText("1 / 2");
+  await expect(page.getByLabel("Go to page")).toHaveValue("1");
+  await expect(page.getByTestId("page-indicator")).toContainText("/ 2");
   await page.getByRole("button", { name: "Next page" }).click();
-  await expect(page.getByTestId("page-indicator")).toContainText("2 / 2");
+  await expect(page.getByLabel("Go to page")).toHaveValue("2");
+  await expect(page.getByTestId("page-indicator")).toContainText("/ 2");
   await expect(page.getByTestId("annotation-marker")).toHaveCount(0);
   await page.getByRole("button", { name: "Previous page" }).click();
   await canvasReady(page);
