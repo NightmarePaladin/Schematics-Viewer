@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { LogForm, IssueForm } from "@/components/maintenance-forms";
 import { UploadForm } from "@/components/upload-form";
 import { WeatherPanel } from "@/components/weather-panel";
@@ -16,8 +16,9 @@ import { z } from "zod";
 
 export const metadata = { title: "Machine" };
 
-export default async function MachineDetail({ params }: { params: Promise<{ id: string }> }) {
+export default async function MachineDetail({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ open?: string }> }) {
   const { id } = await params;
+  const { open } = await searchParams;
   if (!z.string().uuid().safeParse(id).success) notFound();
   const s = await requireOrgPage();
   const { data: m } = await s.supabase.from("machines").select("*, place:locations(id, name, latitude, longitude)").eq("id", id).eq("org_id", s.orgId).maybeSingle();
@@ -47,6 +48,9 @@ export default async function MachineDetail({ params }: { params: Promise<{ id: 
       .eq("machine_id", id)
       .order("performed_at", { ascending: false }),
   ]);
+
+  // QR scan: one drawing on file -> open it directly
+  if (open === "drawing" && schematics.data?.length === 1) redirect(`/schematics/${schematics.data[0].id}`);
 
   const canEdit = canManageMachines(s.role) || (canCreateMachine(s.role) && m.created_by === s.user.id);
   const place = firstOf(m.place as { id: string; name: string; latitude: number | null; longitude: number | null } | null);

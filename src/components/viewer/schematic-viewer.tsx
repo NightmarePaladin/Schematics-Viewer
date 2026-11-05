@@ -2,32 +2,45 @@
 
 import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
 import {
-  ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, EyeOff, Hand, Maximize2, MessageSquare, MousePointer2, MapPin, PanelRightClose,
-  PanelRightOpen, RotateCw, Square, StickyNote, ZoomIn, ZoomOut, MoveHorizontal,
+  ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, EyeOff, Hand, Highlighter, Maximize2, MessageSquare, MousePointer2, MapPin, PanelLeft,
+  PanelRightClose, PanelRightOpen, Pencil, RotateCw, Search, Square, StickyNote, WifiOff, ZoomIn, ZoomOut, MoveHorizontal, MoveUpRight,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { fitScale, normalizeRotation, type Rotation } from "@/lib/coords";
+import { annKey, offlineGet, offlinePut, pdfKey } from "@/lib/offline";
+import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { levelAtLeast } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { AnnotationOverlay, type Tool } from "./annotation-overlay";
 import { AnnotationPanel } from "./annotation-panel";
 import { GrantsPanel } from "./grants-panel";
+import { DetailsPanel } from "./details-panel";
 import { PdfCanvas } from "./pdf-canvas";
-import { api, one, type Ann, type Draft, type LinkedSchematic, type ViewerProps } from "./types";
+import { SearchBar, SearchLayer, usePdfSearch } from "./pdf-search";
+import { Thumbnails } from "./thumbnails";
+import { api, linkHref, one, type Ann, type Draft, type ViewerProps } from "./types";
 
 type Zoom = { mode: "width" } | { mode: "page" } | { mode: "custom"; value: number };
 
-const TOOLS: { id: Tool; key: string; label: string; icon: React.ElementType; needs: "view" | "comment" }[] = [
+const TOOLS: { id: Tool; key: string; label: string; icon: React.ElementType; needs: "view" | "comment"; markup?: boolean }[] = [
   { id: "select", key: "V", label: "Select", icon: MousePointer2, needs: "view" },
   { id: "pan", key: "H", label: "Pan", icon: Hand, needs: "view" },
   { id: "point", key: "P", label: "Point marker", icon: MapPin, needs: "comment" },
   { id: "comment", key: "C", label: "Text comment", icon: MessageSquare, needs: "comment" },
   { id: "box", key: "B", label: "Issue box", icon: Square, needs: "comment" },
   { id: "callout", key: "Q", label: "Quote / callout", icon: StickyNote, needs: "comment" },
+  { id: "pen", key: "D", label: "Pen", icon: Pencil, needs: "comment", markup: true },
+  { id: "arrow", key: "G", label: "Arrow", icon: MoveUpRight, needs: "comment", markup: true },
+  { id: "highlight", key: "M", label: "Highlighter", icon: Highlighter, needs: "comment", markup: true },
 ];
+
+/** A failed request because the network is down or flaky (as opposed to the server refusing: those must NOT fall back to a cached copy). */
+const isNetworkError = (e: unknown) =>
+  (typeof navigator !== "undefined" && navigator.onLine === false) || e instanceof TypeError || /network|failed to fetch|load failed/i.test((e as Error)?.message ?? "");
 
 /** md breakpoint (768px). Desktop: side panel. Phone: bottom sheet, closed until asked for. */
 const MD = "(min-width: 768px)";
@@ -44,7 +57,9 @@ function ToolButton(props: React.ComponentProps<typeof Button>) {
 }
 
 export function SchematicViewer(props: ViewerProps) {
-  const { schematicId, level } = props;
+  const { schematicId } = props;
+  const viewingOld = !!props.viewRevision;
+  const level = viewingOld ? "view" : props.level; // a superseded revision is read-only
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [page, setPage] = useState<PDFPageProxy | null>(null);
   const [pageNum, setPageNum] = useState(props.initialPage);
@@ -54,13 +69,13 @@ export function SchematicViewer(props: ViewerProps) {
   const [zoom, setZoom] = useState<Zoom>({ mode: "width" });
   const [rotation, setRotation] = useState<Rotation>(0);
   const [tool, setTool] = useState<Tool>("select");
-  const [showAnn, setShowAnn] = useState(true);
+  const [showAnn, setShowAnn] = useState(!props.viewRevision);
   const [sidebar, setSidebar] = useState(true); // desktop side panel
   const [sheet, setSheet] = useState(false); // phone bottom sheet (closed by default so it never covers the drawing)
   const isDesktop = useSyncExternalStore(subscribeMd, getMd, () => true);
   const panelOpen = isDesktop ? sidebar : sheet;
   const openPanel = () => { setSidebar(true); setSheet(true); };
-  const [tab, setTab] = useState<"notes" | "access" | "info">("notes");
+  const [tab, setTab] = useState<"notes" | "access" | "info" | "pages">("notes");
   const [annotations, setAnnotations] = useState<Ann[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -74,29 +89,56 @@ export function SchematicViewer(props: ViewerProps) {
   const pinch = useRef<{ dist: number; scale: number } | null>(null);
   const [spacePan, setSpacePan] = useState(false); // Space held: temporary pan, whatever tool is active
   const router = useRouter();
-  const [linkPrompt, setLinkPrompt] = useState<LinkedSchematic | null>(null); // "open the linked drawing?"
+  const [linkPrompt, setLinkPrompt] = useState<{ title: string; machine: string; href: string } | null>(null); // "open the linked drawing?"
+  const [markupOpen, setMarkupOpen] = useState(false); // phones: the pen / arrow / highlighter row
+  const [thumbs, setThumbs] = useState(false); // desktop page strip
+  const [liveTick, setLiveTick] = useState(0); // bumped when someone else changes notes (realtime)
+  const [offlineCopy, setOfflineCopy] = useState(false);
+  const [staleHidden, setStaleHidden] = useState(false);
+  const search = usePdfSearch(pdf);
   const [pageDraft, setPageDraft] = useState<string | null>(null);
 
   const canComment = levelAtLeast(level, "comment");
   const canManage = levelAtLeast(level, "manage");
 
   // Load the PDF through a short-lived signed URL minted after a server-side permission check.
+  // A copy is kept on the device so the drawing still opens on a weak / lost connection (never after a server refusal).
   useEffect(() => {
     let cancelled = false;
     let task: { destroy: () => Promise<void> } | null = null;
+    const revId = props.viewRevision?.id ?? null;
     (async () => {
+      const pdfjs = await import("pdfjs-dist");
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+      const key = pdfKey(schematicId, revId);
+      const show = (doc: PDFDocumentProxy, fromCache: boolean) => {
+        setOfflineCopy(fromCache);
+        setPdf(doc);
+        setNumPages(doc.numPages);
+        setPageNum((n) => Math.min(Math.max(1, n), doc.numPages));
+      };
       try {
-        const { url } = await api<{ url: string }>(`/api/schematics/${schematicId}/file`);
-        const pdfjs = await import("pdfjs-dist");
-        pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+        const { url } = await api<{ url: string }>(`/api/schematics/${schematicId}/file${revId ? `?revision=${revId}` : ""}`);
         const loading = pdfjs.getDocument({ url });
         task = loading;
         const doc = await loading.promise;
         if (cancelled) return;
-        setPdf(doc);
-        setNumPages(doc.numPages);
-        setPageNum((n) => Math.min(Math.max(1, n), doc.numPages));
+        show(doc, false);
+        void fetch(url).then((r) => (r.ok ? r.blob() : null)).then((b) => b && offlinePut(key, b, "application/pdf")).catch(() => {});
       } catch (e) {
+        if (cancelled) return;
+        const cached = isNetworkError(e) ? await offlineGet(key) : undefined;
+        if (cached) {
+          try {
+            const loading = pdfjs.getDocument({ data: await cached.arrayBuffer() });
+            task = loading;
+            const doc = await loading.promise;
+            if (!cancelled) show(doc, true);
+            return;
+          } catch {
+            /* fall through to the error */
+          }
+        }
         if (!cancelled) setLoadError((e as Error).message || "Could not load the document.");
       }
     })();
@@ -104,7 +146,7 @@ export function SchematicViewer(props: ViewerProps) {
       cancelled = true;
       void task?.destroy();
     };
-  }, [schematicId, attempt]);
+  }, [schematicId, attempt, props.viewRevision?.id]);
 
   useEffect(() => {
     if (!pdf) return;
@@ -119,13 +161,65 @@ export function SchematicViewer(props: ViewerProps) {
     window.history.replaceState(null, "", u);
   }, [pageNum]);
 
+  const fetchAnnotations = useCallback(async (): Promise<Ann[]> => {
+    try {
+      const r = await api<{ data: Ann[] }>(`/api/annotations?schematic_id=${schematicId}`);
+      void offlinePut(annKey(schematicId), JSON.stringify(r.data), "application/json");
+      return r.data;
+    } catch (e) {
+      const cached = isNetworkError(e) ? await offlineGet(annKey(schematicId)) : undefined;
+      if (cached) return (await cached.json()) as Ann[];
+      throw e;
+    }
+  }, [schematicId]);
   const loadAnnotations = useCallback(async (focusId?: string) => {
-    const r = await api<{ data: Ann[] }>(`/api/annotations?schematic_id=${schematicId}`);
-    setAnnotations(r.data);
+    setAnnotations(await fetchAnnotations());
     setDraft(null);
     if (focusId) setSelectedId(focusId);
-  }, [schematicId]);
+  }, [fetchAnnotations]);
   useEffect(() => { void loadAnnotations().catch((e) => setLoadError((e as Error).message)); }, [loadAnnotations]);
+
+  // Live updates: other people's notes, replies and attachments appear without a refresh (RLS still filters what arrives).
+  useEffect(() => {
+    let sb: ReturnType<typeof createBrowserSupabase>;
+    try { sb = createBrowserSupabase(); } catch { return; }
+    let t: number | undefined;
+    const bump = () => {
+      window.clearTimeout(t);
+      t = window.setTimeout(() => {
+        void fetchAnnotations().then(setAnnotations).catch(() => {}); // keeps any draft being typed
+        setLiveTick((n) => n + 1);
+      }, 400);
+    };
+    const ch = sb
+      .channel(`viewer-${schematicId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "annotations", filter: `schematic_id=eq.${schematicId}` }, bump)
+      .on("postgres_changes", { event: "*", schema: "public", table: "annotation_replies" }, bump)
+      .on("postgres_changes", { event: "*", schema: "public", table: "annotation_attachments" }, bump)
+      .subscribe();
+    const onVis = () => { if (document.visibilityState === "visible") bump(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.clearTimeout(t);
+      document.removeEventListener("visibilitychange", onVis);
+      void sb.removeChannel(ch);
+    };
+  }, [schematicId, fetchAnnotations]);
+
+  // Arriving from a link / "referenced from" / notification: go to the page and select the annotation.
+  const focused = useRef(false);
+  useEffect(() => {
+    if (focused.current || !props.focusId || !annotations.length || !page) return;
+    const a = annotations.find((x) => x.id === props.focusId);
+    if (!a) return;
+    focused.current = true;
+    if (a.page_number !== pageNum) setPageNum(a.page_number);
+    setSelectedId(a.id);
+    const raf = requestAnimationFrame(() => requestAnimationFrame(() => {
+      scroller.current?.querySelector(`[data-annotation-id="${a.id}"]`)?.scrollIntoView({ block: "center", inline: "center" });
+    }));
+    return () => cancelAnimationFrame(raf);
+  }, [annotations, page, pageNum, props.focusId]);
 
   // Track available space for fit modes.
   useEffect(() => {
@@ -196,12 +290,23 @@ export function SchematicViewer(props: ViewerProps) {
     return () => el.removeEventListener("wheel", onWheel);
   });
 
+  const activeHit = search.hits[search.active];
+  useEffect(() => {
+    if (!activeHit) return;
+    if (activeHit.page !== pageNum) { setPageNum(activeHit.page); return; }
+    const raf = requestAnimationFrame(() => {
+      scroller.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: "center", inline: "center" });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [activeHit, pageNum, page]);
+
   const goto = (n: number) => { setSelectedId(null); setDraft(null); setPageNum(Math.min(Math.max(1, n), Math.max(1, numPages))); };
   const rotate = () => setRotation((r) => normalizeRotation(r + 90));
 
   useEffect(() => {
     const typing = (t: HTMLElement) => ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName) || t.isContentEditable;
     const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "f") { e.preventDefault(); search.setOpen(true); return; }
       if (typing(e.target as HTMLElement) || e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (k === " ") { setSpacePan(true); e.preventDefault(); return; }
@@ -213,10 +318,12 @@ export function SchematicViewer(props: ViewerProps) {
       else if (k === "f") setZoom({ mode: "page" });
       else if (k === "r") rotate();
       else if (k === "a") setShowAnn((v) => !v);
-      else if (k === "]" ) setSidebar((v) => !v);
+      else if (k === "]") setSidebar((v) => !v);
+      else if (k === "t") setThumbs((v) => !v);
+      else if (k === "/") { e.preventDefault(); search.setOpen(true); }
       else if (k === "PageDown" || k === "ArrowRight") goto(pageNum + 1);
       else if (k === "PageUp" || k === "ArrowLeft") goto(pageNum - 1);
-      else if (k === "Escape") { setDraft(null); setSelectedId(null); setTool("select"); }
+      else if (k === "Escape") { setDraft(null); setSelectedId(null); setTool("select"); if (search.open) search.close(); }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === " ") { setSpacePan(false); panning.current = null; }
@@ -244,9 +351,9 @@ export function SchematicViewer(props: ViewerProps) {
     return () => cancelAnimationFrame(raf);
   }, [draft, isDesktop]);
 
-  const pageAnns = annotations.filter((a) => a.page_number === pageNum);
-  // Numbering uses position in the full list so it matches the sidebar.
-  const numbered = pageAnns;
+  const anns = viewingOld ? [] : annotations; // notes belong to the current revision
+  const staleCount = viewingOld ? 0 : annotations.filter((a) => a.schematic_revision && a.schematic_revision !== props.currentRevision).length;
+  const pageAnns = anns.filter((a) => a.page_number === pageNum);
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="schematic-viewer">
@@ -269,11 +376,15 @@ export function SchematicViewer(props: ViewerProps) {
             <span>/ {numPages || "–"}</span>
           </span>
           <ToolButton variant="ghost" aria-label="Next page" onClick={() => goto(pageNum + 1)} disabled={pageNum >= numPages}><ChevronRight /></ToolButton>
+          <ToolButton variant={search.open ? "secondary" : "ghost"} aria-label="Search this drawing" aria-pressed={search.open} title="Search text (Ctrl+F or /)" data-testid="toggle-search" onClick={() => (search.open ? search.close() : search.setOpen(true))}><Search /></ToolButton>
         </div>
 
         {/* row 2 on a phone: just the tools (zoom/fit/rotate float over the drawing; pinch also works); same row as the rest on desktop */}
-        <div className="order-3 flex w-full items-center justify-between gap-1 md:order-none md:w-auto md:flex-1 md:flex-nowrap md:justify-start">
+        <div className="order-3 flex w-full flex-wrap items-center justify-between gap-1 md:order-none md:w-auto md:flex-1 md:flex-nowrap md:justify-start">
           <div className="hidden items-center gap-1 md:flex">
+          {numPages > 1 && (
+            <ToolButton variant={thumbs ? "secondary" : "ghost"} aria-label="Page thumbnails" aria-pressed={thumbs} title="Page thumbnails (T)" data-testid="toggle-thumbs" onClick={() => setThumbs((v) => !v)}><PanelLeft /></ToolButton>
+          )}
           <span className="mx-1 hidden h-5 w-px bg-border md:inline-block" />
           <ToolButton variant="ghost" aria-label="Zoom out" title="Zoom out (−)" onClick={() => step(-1)}><ZoomOut /></ToolButton>
           <span className="w-12 text-center text-sm tabular-nums max-md:hidden" data-testid="zoom-level">{Math.round(scale * 100)}%</span>
@@ -283,7 +394,7 @@ export function SchematicViewer(props: ViewerProps) {
           <ToolButton variant="ghost" aria-label="Rotate view 90 degrees" title="Rotate (R)" onClick={rotate}><RotateCw /></ToolButton>
           </div>
           <span className="mx-1 hidden h-5 w-px bg-border md:inline-block" />
-          {TOOLS.filter((t) => levelAtLeast(level, t.needs)).map((t) => (
+          {TOOLS.filter((t) => !t.markup && levelAtLeast(level, t.needs)).map((t) => (
             <ToolButton
               key={t.id}
               variant={tool === t.id ? "default" : "ghost"}
@@ -296,6 +407,26 @@ export function SchematicViewer(props: ViewerProps) {
               <t.icon />
             </ToolButton>
           ))}
+          {canComment && (
+            <ToolButton variant={markupOpen || TOOLS.some((t) => t.markup && t.id === tool) ? "secondary" : "ghost"} className="md:hidden" aria-label="Markup tools" aria-expanded={markupOpen} data-testid="toggle-markup" onClick={() => setMarkupOpen((v) => !v)}><Pencil /></ToolButton>
+          )}
+          {/* pen / arrow / highlighter: always inline on desktop, a second row on phones */}
+          <div className={cn("items-center gap-1 max-md:w-full max-md:basis-full md:flex", markupOpen ? "flex" : "hidden")}>
+            <span className="mx-1 hidden h-5 w-px bg-border md:inline-block" />
+            {TOOLS.filter((t) => t.markup && levelAtLeast(level, t.needs)).map((t) => (
+              <ToolButton
+                key={t.id}
+                variant={tool === t.id ? "default" : "ghost"}
+                aria-label={t.label}
+                aria-pressed={tool === t.id}
+                title={`${t.label} (${t.key})`}
+                data-testid={`tool-${t.id}`}
+                onClick={() => { setTool(t.id); setSelectedId(null); }}
+              >
+                <t.icon />
+              </ToolButton>
+            ))}
+          </div>
           {!canComment && <span className="ml-1 rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">View only</span>}
           <span className="mx-1 hidden h-5 w-px bg-border md:inline-block" />
           <ToolButton variant="ghost" aria-label={showAnn ? "Hide annotations" : "Show annotations"} aria-pressed={showAnn} title="Show / hide annotations (A)" data-testid="toggle-annotations" onClick={() => setShowAnn((v) => !v)}>
@@ -315,7 +446,48 @@ export function SchematicViewer(props: ViewerProps) {
         </ToolButton>
       </div>
 
+      {search.open && <SearchBar s={search} />}
+
+      {(props.backTo || props.crumbs.length > 1) && (
+        <nav aria-label="Machine hierarchy" data-testid="breadcrumbs" className="flex items-center gap-1 overflow-x-auto whitespace-nowrap border-b bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
+          {props.backTo && (
+            <Link href={`/schematics/${props.backTo.id}`} data-testid="back-to-parent" className="mr-2 inline-flex shrink-0 items-center gap-1 rounded-full border bg-background px-2 py-0.5 font-medium text-foreground hover:bg-muted">
+              <ChevronLeft className="size-3" aria-hidden /> Back to {props.backTo.title}
+            </Link>
+          )}
+          {props.crumbs.map((c, i) => (
+            <span key={i} className="flex shrink-0 items-center gap-1">
+              {i > 0 && <ChevronRight className="size-3" aria-hidden />}
+              {c.href ? <Link href={c.href} className="hover:text-foreground hover:underline">{c.label}</Link> : <span className="font-medium text-foreground">{c.label}</span>}
+            </span>
+          ))}
+        </nav>
+      )}
+
+      {viewingOld && (
+        <div role="alert" data-testid="superseded-banner" className="flex flex-wrap items-center gap-2 border-b border-destructive/40 bg-destructive/10 px-3 py-1.5 text-sm">
+          <span><strong>Superseded:</strong> you are viewing revision {props.viewRevision!.label}. The current revision is {props.currentRevision}. Notes are hidden.</span>
+          <Link href={`/schematics/${schematicId}`} className="font-medium underline">Open current revision</Link>
+        </div>
+      )}
+      {staleCount > 0 && !staleHidden && (
+        <div role="status" data-testid="stale-banner" className="flex items-center gap-2 border-b border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-sm">
+          <span className="min-w-0 flex-1">This drawing was revised to {props.currentRevision}. {staleCount} note{staleCount === 1 ? " was" : "s were"} placed on an earlier revision: check their positions.</span>
+          <button type="button" className="shrink-0 text-xs underline" onClick={() => setStaleHidden(true)}>Dismiss</button>
+        </div>
+      )}
+      {offlineCopy && (
+        <div role="status" data-testid="offline-chip" className="flex items-center gap-2 border-b bg-muted px-3 py-1 text-xs text-muted-foreground">
+          <WifiOff className="size-3.5" aria-hidden /> Showing the copy saved on this device. Changes will not save until you are back online.
+        </div>
+      )}
+
       <div className="relative flex min-h-0 flex-1">
+        {thumbs && isDesktop && pdf && numPages > 1 && (
+          <aside aria-label="Page thumbnails" className="hidden w-36 shrink-0 border-r bg-background md:flex md:flex-col">
+            <Thumbnails pdf={pdf} numPages={numPages} current={pageNum} onGo={goto} className="min-h-0 flex-1" />
+          </aside>
+        )}
         {/* phones: zoom / fit / rotate float over the drawing, out of the toolbar */}
         <div className={cn("absolute bottom-3 right-3 z-30 flex flex-col gap-1 rounded-xl border bg-background/90 p-1 shadow-md backdrop-blur md:hidden", sheet && "hidden")}>
           <ToolButton variant="ghost" aria-label="Zoom in" onClick={() => step(1)}><ZoomIn /></ToolButton>
@@ -398,12 +570,13 @@ export function SchematicViewer(props: ViewerProps) {
           ) : (
             <div ref={frame} className="relative mx-auto w-fit" style={{ width: shown.width, height: shown.height }} data-testid="page-frame" data-page={pageNum}>
               <PdfCanvas page={page} scale={scale} rotation={rotation} />
+              <SearchLayer hits={search.hits} active={search.active} page={pageNum} width={shown.width} height={shown.height} rotation={rotation} />
               <AnnotationOverlay
                 width={shown.width}
                 height={shown.height}
                 rotation={rotation}
                 pageNumber={pageNum}
-                annotations={numbered}
+                annotations={pageAnns}
                 draft={draft}
                 selectedId={selectedId}
                 tool={tool}
@@ -413,8 +586,10 @@ export function SchematicViewer(props: ViewerProps) {
                   setDraft(null);
                   setTab("notes");
                   // a part that has its own drawing on file: offer to jump there before covering the screen with the panel
-                  const link = one(annotations.find((a) => a.id === id)?.linked);
-                  if (link) setLinkPrompt(link); else openPanel();
+                  const ann = annotations.find((a) => a.id === id);
+                  const link = ann ? one(ann.linked) : null;
+                  const href = ann ? linkHref(ann, schematicId) : null;
+                  if (link && href) setLinkPrompt({ title: link.title, machine: one(link.machine)?.name ?? "", href }); else openPanel();
                 }}
                 onDraft={(d) => { setDraft(d); setSelectedId(null); openPanel(); setTab("notes"); setTool("select"); }}
               />
@@ -433,7 +608,7 @@ export function SchematicViewer(props: ViewerProps) {
           >
             <ChevronLeft className="size-4" aria-hidden />
             <span className="[writing-mode:vertical-rl]">Annotations</span>
-            <CountBadge n={annotations.length} />
+            <CountBadge n={anns.length} />
           </button>
         )}
         {panelOpen && (
@@ -455,12 +630,12 @@ export function SchematicViewer(props: ViewerProps) {
             >
               <span aria-hidden className="mx-auto h-1 w-10 rounded-full bg-muted-foreground/30" />
               <span className="flex h-10 items-center justify-between text-sm font-semibold">
-                <span className="flex items-center gap-2"><MessageSquare className="size-4" aria-hidden /> Annotations <CountBadge n={annotations.length} /></span>
+                <span className="flex items-center gap-2"><MessageSquare className="size-4" aria-hidden /> Annotations <CountBadge n={anns.length} /></span>
                 <ChevronDown className="size-5" aria-hidden />
               </span>
             </button>
             <div className="flex border-b text-sm" role="tablist">
-              {([["notes", "Notes"], ...(canManage ? [["access", "Access"]] : []), ["info", "Details"]] as [typeof tab, string][]).map(([id, label]) => (
+              {([["notes", "Notes"], ...(!isDesktop && numPages > 1 ? [["pages", "Pages"]] : []), ...(canManage && !viewingOld ? [["access", "Access"]] : []), ["info", "Details"]] as [typeof tab, string][]).map(([id, label]) => (
                 <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
                   className={cn("flex-1 border-b-2 px-3 py-2 font-medium", tab === id ? "border-primary" : "border-transparent text-muted-foreground")}>
                   {label}
@@ -470,7 +645,7 @@ export function SchematicViewer(props: ViewerProps) {
             <div className="min-h-0 flex-1 overflow-auto">
               {tab === "notes" && (
                 <AnnotationPanel
-                  annotations={annotations}
+                  annotations={anns}
                   selectedId={selectedId}
                   onSelect={(id) => {
                     const a = annotations.find((x) => x.id === id);
@@ -486,17 +661,14 @@ export function SchematicViewer(props: ViewerProps) {
                   onCancelDraft={() => setDraft(null)}
                   onChanged={loadAnnotations}
                   schematicId={schematicId}
+                  currentRevision={props.currentRevision}
+                  liveTick={liveTick}
+                  readOnly={viewingOld}
                 />
               )}
               {tab === "access" && canManage && <GrantsPanel schematicId={schematicId} members={props.members} groups={props.groups} />}
-              {tab === "info" && (
-                <dl className="space-y-3 p-3 text-sm">
-                  {([
-                    ["Document number", props.meta.documentNumber], ["Revision", props.meta.revision], ["Machine", props.meta.machineName],
-                    ["Uploaded by", props.meta.uploader], ["Uploaded", props.meta.uploadedAt], ["Your access", level],
-                  ] as const).map(([k, v]) => (<div key={k}><dt className="text-xs text-muted-foreground">{k}</dt><dd className="font-medium capitalize-first">{v}</dd></div>))}
-                </dl>
-              )}
+              {tab === "pages" && pdf && <Thumbnails pdf={pdf} numPages={numPages} current={pageNum} onGo={(n) => { goto(n); setSheet(false); }} className="grid grid-cols-3" />}
+              {tab === "info" && <DetailsPanel p={props} />}
             </div>
           </aside>
         )}
@@ -508,12 +680,12 @@ export function SchematicViewer(props: ViewerProps) {
             <DialogTitle>Open the schematic for this part?</DialogTitle>
             <DialogDescription>
               {linkPrompt?.title}
-              {one(linkPrompt?.machine ?? null)?.name ? ` · ${one(linkPrompt?.machine ?? null)!.name}` : ""}
+              {linkPrompt?.machine ? ` · ${linkPrompt.machine}` : ""}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" data-testid="link-stay" onClick={() => { setLinkPrompt(null); openPanel(); }}>Stay here</Button>
-            <Button data-testid="link-open" onClick={() => { const id = linkPrompt!.id; setLinkPrompt(null); router.push(`/schematics/${id}`); }}>Open schematic</Button>
+            <Button data-testid="link-open" onClick={() => { const href = linkPrompt!.href; setLinkPrompt(null); router.push(href); }}>Open schematic</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -528,7 +700,7 @@ export function SchematicViewer(props: ViewerProps) {
           aria-label="Open annotations panel"
           className="flex h-12 shrink-0 items-center justify-between rounded-t-2xl border-t bg-background px-4 text-sm font-semibold shadow-[0_-2px_8px_rgba(0,0,0,0.08)] md:hidden"
         >
-          <span className="flex items-center gap-2"><MessageSquare className="size-4" aria-hidden /> Annotations <CountBadge n={annotations.length} /></span>
+          <span className="flex items-center gap-2"><MessageSquare className="size-4" aria-hidden /> Annotations <CountBadge n={anns.length} /></span>
           <ChevronUp className="size-5" aria-hidden />
         </button>
       )}

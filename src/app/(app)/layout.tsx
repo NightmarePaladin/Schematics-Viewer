@@ -9,7 +9,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { data: profile } = await s.supabase.from("profiles").select("display_name").eq("id", s.user.id).maybeSingle();
   return (
     <AppShell
-      user={{ name: profile?.display_name ?? s.user.email ?? "User", email: s.user.email ?? "" }}
+      user={{ id: s.user.id, name: profile?.display_name ?? s.user.email ?? "User", email: s.user.email ?? "" }}
       role={s.role}
       orgId={s.orgId}
       orgs={s.memberships.map((m) => ({ org_id: m.org_id, org_name: m.org_name }))}

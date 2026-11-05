@@ -13,9 +13,9 @@ const ID = "6f1b7c64-1d8a-4f5e-9d3c-0a1b2c3d4e5f";
 
 describe("machine QR codes", () => {
   it("builds the machine page URL from the origin, tolerating trailing slashes", () => {
-    expect(machineUrl("https://schematics-viewer.vercel.app", ID)).toBe(`https://schematics-viewer.vercel.app/machines/${ID}`);
-    expect(machineUrl("http://localhost:3000/", ID)).toBe(`http://localhost:3000/machines/${ID}`);
-    expect(machineUrl("https://x.test//", ID)).toBe(`https://x.test/machines/${ID}`);
+    expect(machineUrl("https://schematics-viewer.vercel.app", ID)).toBe(`https://schematics-viewer.vercel.app/machines/${ID}?open=drawing`);
+    expect(machineUrl("http://localhost:3000/", ID)).toBe(`http://localhost:3000/machines/${ID}?open=drawing`);
+    expect(machineUrl("https://x.test//", ID)).toBe(`https://x.test/machines/${ID}?open=drawing`);
   });
 
   it("a generated PNG scans back to exactly the machine URL", async () => {
@@ -34,7 +34,7 @@ describe("machine QR codes", () => {
     const a = await qrPng(machineUrl("https://x.test", ID), 256);
     const b = await qrPng(machineUrl("https://x.test", "11111111-1111-4111-8111-111111111111"), 256);
     expect(a.equals(b)).toBe(false);
-    expect(decode(b)).toBe("https://x.test/machines/11111111-1111-4111-8111-111111111111");
+    expect(decode(b)).toBe("https://x.test/machines/11111111-1111-4111-8111-111111111111?open=drawing");
   });
 
   it("the SVG is a scalable vector with fixed black-on-white colours (safe in dark mode and when printed)", async () => {
@@ -48,7 +48,7 @@ describe("machine QR codes", () => {
 
   it("the code carries only the URL, never machine data", async () => {
     const decoded = decode(await qrPng(machineUrl("https://x.test", ID), 512));
-    expect(decoded).toBe(`https://x.test/machines/${ID}`);
+    expect(decoded).toBe(`https://x.test/machines/${ID}?open=drawing`);
     expect(decoded).not.toMatch(/serial|secret|token|password/i);
   });
 });

@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { IssueStatusBadge, SeverityBadge, fmtDate, selectClass } from "@/components/ui-bits";
 import { levelAtLeast, type PermLevel } from "@/lib/permissions";
 import { ISSUE_STATUSES, SEVERITIES } from "@/lib/schemas";
-import { api, colorFor, one, type Ann, type Draft, type Reply } from "./types";
+import { Attachments } from "./attachments";
+import { api, colorFor, linkHref, one, type Ann, type Draft, type Reply } from "./types";
 
 interface LinkOption { id: string; title: string; machine_name: string }
 
@@ -24,19 +25,58 @@ function useLinkable(schematicId: string) {
   return opts;
 }
 
-function LinkSelect({ id, value, onChange, opts, disabled }: { id: string; value: string; onChange: (v: string) => void; opts: LinkOption[]; disabled?: boolean }) {
+export interface LinkValue { s: string; a: string; p: string }
+const NO_LINK: LinkValue = { s: "", a: "", p: "" };
+
+/** Choose a sub-machine drawing and, optionally, a page or a specific pin on it to open on. */
+function LinkField({ id, value, onChange, opts, disabled }: { id: string; value: LinkValue; onChange: (v: LinkValue) => void; opts: LinkOption[]; disabled?: boolean }) {
+  const [pins, setPins] = useState<Ann[]>([]);
+  useEffect(() => {
+    if (!value.s) return;
+    let off = false;
+    api<{ data: Ann[] }>(`/api/annotations?schematic_id=${value.s}`).then((r) => { if (!off) setPins(r.data); }).catch(() => { if (!off) setPins([]); });
+    return () => { off = true; };
+  }, [value.s]);
+  const shown = value.s ? pins : [];
   return (
-    <div>
-      <label className="mb-1 block text-xs text-muted-foreground" htmlFor={id}>Links to schematic</label>
-      <select id={id} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={selectClass}>
-        <option value="">No link</option>
-        {opts.map((o) => <option key={o.id} value={o.id}>{o.title} — {o.machine_name}</option>)}
-      </select>
+    <div className="space-y-2">
+      <div>
+        <label className="mb-1 block text-xs text-muted-foreground" htmlFor={id}>Links to schematic</label>
+        <select id={id} value={value.s} disabled={disabled} onChange={(e) => onChange(e.target.value ? { s: e.target.value, a: "", p: "" } : NO_LINK)} className={selectClass}>
+          <option value="">No link</option>
+          {opts.map((o) => <option key={o.id} value={o.id}>{o.title} — {o.machine_name}</option>)}
+        </select>
+      </div>
+      {value.s && (
+        <div className="flex items-end gap-2">
+          <div className="min-w-0 flex-1">
+            <label className="mb-1 block text-xs text-muted-foreground" htmlFor={`${id}-spot`}>Opens on</label>
+            <select id={`${id}-spot`} value={value.a} disabled={disabled} className={selectClass}
+              onChange={(e) => { const pin = shown.find((x) => x.id === e.target.value); onChange({ s: value.s, a: e.target.value, p: pin ? String(pin.page_number) : value.p }); }}>
+              <option value="">A page (no specific spot)</option>
+              {shown.map((x, i) => <option key={x.id} value={x.id}>#{i + 1} · p.{x.page_number} · {(x.body || TYPE_LABEL[x.type]).slice(0, 40)}</option>)}
+            </select>
+          </div>
+          {!value.a && (
+            <div className="w-20 shrink-0">
+              <label className="mb-1 block text-xs text-muted-foreground" htmlFor={`${id}-page`}>Page</label>
+              <input id={`${id}-page`} inputMode="numeric" disabled={disabled} placeholder="1" value={value.p}
+                onChange={(e) => onChange({ ...value, p: e.target.value.replace(/[^0-9]/g, "").slice(0, 4) })} className={selectClass} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-const TYPE_LABEL = { point: "Point marker", comment: "Comment", box: "Issue box", callout: "Callout" } as const;
+const linkPatch = (v: LinkValue) => ({
+  linked_schematic_id: v.s || null,
+  linked_annotation_id: v.s && v.a ? v.a : null,
+  linked_page: v.s && (v.a || v.p) ? Number(v.p) || null : null,
+});
+
+const TYPE_LABEL = { point: "Point marker", comment: "Comment", box: "Issue box", callout: "Callout", pen: "Pen stroke", arrow: "Arrow", highlight: "Highlight" } as const;
 
 interface Props {
   annotations: Ann[];
@@ -51,12 +91,29 @@ interface Props {
   onCancelDraft: () => void;
   onChanged: (focusId?: string) => Promise<void> | void;
   schematicId: string;
+  currentRevision: string;
+  /** bumped by realtime events so open threads reload */
+  liveTick: number;
+  /** viewing a superseded revision: read-only */
+  readOnly?: boolean;
 }
 
 export function AnnotationPanel(p: Props) {
   const [onlyPage, setOnlyPage] = useState(true);
+  const [q, setQ] = useState("");
+  const [fStatus, setFStatus] = useState("");
+  const [fType, setFType] = useState("");
+  const [mine, setMine] = useState(false);
   const selected = p.annotations.find((a) => a.id === p.selectedId) ?? null;
-  const list = p.annotations.map((a, i) => ({ a, n: i + 1 })).filter(({ a }) => !onlyPage || a.page_number === p.currentPage);
+  const needle = q.trim().toLowerCase();
+  const filtering = !!(needle || fStatus || fType || mine);
+  const list = p.annotations
+    .map((a, i) => ({ a, n: i + 1 }))
+    .filter(({ a }) => !onlyPage || a.page_number === p.currentPage)
+    .filter(({ a }) => !fStatus || (fStatus === "none" ? !a.status : a.status === fStatus))
+    .filter(({ a }) => !fType || a.type === fType)
+    .filter(({ a }) => !mine || a.author_id === p.userId)
+    .filter(({ a }) => !needle || `${a.body} ${one(a.author)?.display_name ?? ""} ${TYPE_LABEL[a.type]}`.toLowerCase().includes(needle));
 
   if (p.draft) return <DraftForm {...p} draft={p.draft} />;
   if (selected) return <Thread {...p} ann={selected} number={p.annotations.indexOf(selected) + 1} />;
@@ -69,10 +126,26 @@ export function AnnotationPanel(p: Props) {
           <input type="checkbox" checked={onlyPage} onChange={(e) => setOnlyPage(e.target.checked)} /> This page only
         </label>
       </div>
+      <div className="space-y-1.5 border-b px-3 py-2" data-testid="annotation-filters">
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search notes…" aria-label="Search notes" className="h-8" />
+        <div className="flex flex-wrap items-center gap-1.5">
+          <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label="Filter by status" className={`${selectClass} h-8 w-auto flex-1`}>
+            <option value="">Any status</option>
+            <option value="none">No status</option>
+            {ISSUE_STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+          </select>
+          <select value={fType} onChange={(e) => setFType(e.target.value)} aria-label="Filter by type" className={`${selectClass} h-8 w-auto flex-1`}>
+            <option value="">Any type</option>
+            {Object.entries(TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <label className="flex items-center gap-1 text-xs text-muted-foreground"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Mine</label>
+          {filtering && <button type="button" className="text-xs text-primary hover:underline" onClick={() => { setQ(""); setFStatus(""); setFType(""); setMine(false); }}>Clear</button>}
+        </div>
+      </div>
       <ul className="flex-1 divide-y overflow-auto" data-testid="annotation-list">
         {list.length === 0 && (
           <li className="p-4 text-sm text-muted-foreground">
-            {levelAtLeast(p.level, "comment") ? "Choose a tool above, then click the drawing to add a marker, comment or box." : "No annotations on this page."}
+            {filtering ? "No notes match these filters." : levelAtLeast(p.level, "comment") && !p.readOnly ? "Choose a tool above, then click the drawing to add a marker, comment or box." : "No annotations on this page."}
           </li>
         )}
         {list.map(({ a, n }) => (
@@ -83,6 +156,8 @@ export function AnnotationPanel(p: Props) {
                 <span className="block truncate font-medium">{a.body || TYPE_LABEL[a.type]}</span>
                 <span className="block text-xs text-muted-foreground">
                   p.{a.page_number} · {one(a.author)?.display_name} · {a.replies?.[0]?.count ?? 0} repl{(a.replies?.[0]?.count ?? 0) === 1 ? "y" : "ies"}
+                  {(a.attachments?.[0]?.count ?? 0) > 0 && ` · ${a.attachments![0].count} attached`}
+                  {a.schematic_revision && a.schematic_revision !== p.currentRevision && <span className="ml-1 rounded bg-amber-500/20 px-1 text-amber-700 dark:text-amber-400" title="Placed on an earlier revision: check its position">rev {a.schematic_revision}</span>}
                 </span>
               </span>
               {a.status && <IssueStatusBadge status={a.status} />}
@@ -98,7 +173,7 @@ function DraftForm({ draft, schematicId, onCancelDraft, onChanged }: Props & { d
   const needsText = draft.type === "comment" || draft.type === "callout";
   const [body, setBody] = useState("");
   const [status, setStatus] = useState<string>("");
-  const [link, setLink] = useState("");
+  const [link, setLink] = useState<LinkValue>(NO_LINK);
   const linkable = useLinkable(schematicId);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -120,7 +195,8 @@ function DraftForm({ draft, schematicId, onCancelDraft, onChanged }: Props & { d
           ...(draft.width ? { width: draft.width, height: draft.height } : {}),
           body,
           status: status || null,
-          ...(link ? { linked_schematic_id: link } : {}),
+          ...(link.s ? linkPatch(link) : {}),
+          ...(draft.path ? { path: draft.path } : {}),
         }),
       });
       toast.success("Annotation saved");
@@ -151,7 +227,7 @@ function DraftForm({ draft, schematicId, onCancelDraft, onChanged }: Props & { d
           {ISSUE_STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
         </select>
       </div>
-      {linkable.length > 0 && <LinkSelect id="ann-link" value={link} onChange={setLink} opts={linkable} />}
+      {linkable.length > 0 && <LinkField id="ann-link" value={link} onChange={setLink} opts={linkable} />}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="flex gap-2">
         <Button type="submit" disabled={busy} data-testid="save-annotation">{busy ? "Saving…" : "Save annotation"}</Button>
@@ -183,7 +259,7 @@ function Thread(p: Props & { ann: Ann; number: number }) {
       setError((e as Error).message);
     }
   }, [ann.id]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); }, [load, p.liveTick]);
 
   async function reply(e: React.FormEvent) {
     e.preventDefault();
@@ -206,10 +282,10 @@ function Thread(p: Props & { ann: Ann; number: number }) {
       setError((err as Error).message);
     }
   }
-  async function setLink(v: string) {
+  async function setLink(v: LinkValue) {
     setError(null);
     try {
-      await api(`/api/annotations/${ann.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linked_schematic_id: v || null }) });
+      await api(`/api/annotations/${ann.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(linkPatch(v)) });
       await p.onChanged(ann.id);
     } catch (err) {
       setError((err as Error).message);
@@ -253,12 +329,18 @@ function Thread(p: Props & { ann: Ann; number: number }) {
               <div className="font-medium">Linked schematic</div>
               <div className="truncate">{linked.title}{one(linked.machine)?.name ? ` · ${one(linked.machine)!.name}` : ""}</div>
             </div>
-            <Button size="sm" onClick={() => router.push(`/schematics/${linked.id}`)}>Open</Button>
+            <Button size="sm" onClick={() => router.push(linkHref(ann, p.schematicId)!)}>Open</Button>
           </div>
         )}
-        {canEdit && (linkable.length > 0 || ann.linked_schematic_id) && (
-          <LinkSelect id="thread-link" value={ann.linked_schematic_id ?? ""} onChange={setLink} opts={linkable} />
+        {canEdit && !p.readOnly && (linkable.length > 0 || ann.linked_schematic_id) && (
+          <LinkField id="thread-link" value={{ s: ann.linked_schematic_id ?? "", a: ann.linked_annotation_id ?? "", p: ann.linked_page ? String(ann.linked_page) : "" }} onChange={setLink} opts={linkable} />
         )}
+        {ann.schematic_revision && ann.schematic_revision !== p.currentRevision && (
+          <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-xs" data-testid="stale-note">
+            Placed on revision {ann.schematic_revision}; this drawing is now revision {p.currentRevision}. Check that the marker still points at the right part.
+          </p>
+        )}
+        <Attachments annotationId={ann.id} canAdd={levelAtLeast(p.level, "comment") && !p.readOnly} userId={p.userId} canManage={levelAtLeast(p.level, "manage")} refreshKey={p.liveTick} onChanged={() => p.onChanged(ann.id)} />
 
         {issue ? (
           <div className="rounded-lg border bg-muted/40 p-2 text-xs">

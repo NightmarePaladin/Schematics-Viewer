@@ -5,9 +5,12 @@ import QRCode from "qrcode";
  * sign-in and permission checks still apply, so a QR sticker never exposes any data by itself.
  */
 
-/** Absolute URL a label points at. */
+/**
+ * Absolute URL a label points at. `?open=drawing` makes the machine page jump straight to the drawing when the machine has
+ * exactly one (otherwise the page shows the list), so a scan on the shop floor lands on the schematic.
+ */
 export function machineUrl(origin: string, machineId: string): string {
-  return `${origin.replace(/\/+$/, "")}/machines/${machineId}`;
+  return `${origin.replace(/\/+$/, "")}/machines/${machineId}?open=drawing`;
 }
 
 /**

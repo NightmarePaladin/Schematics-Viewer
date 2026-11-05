@@ -1,6 +1,7 @@
 import type { PermLevel } from "@/lib/permissions";
 
-export type AnnType = "point" | "comment" | "box" | "callout";
+export type AnnType = "point" | "comment" | "box" | "callout" | "pen" | "arrow" | "highlight";
+export type Path = [number, number][];
 export type IssueStatus = "open" | "in_progress" | "resolved";
 
 export interface LinkedSchematic {
@@ -24,6 +25,11 @@ export interface Ann {
   author: { display_name: string } | { display_name: string }[] | null;
   replies: { count: number }[] | null;
   linked_schematic_id: string | null;
+  linked_page: number | null;
+  linked_annotation_id: string | null;
+  path: Path | null;
+  schematic_revision: string | null;
+  attachments: { count: number }[] | null;
   /** The linked drawing, or null when none / not visible to this user. */
   linked: LinkedSchematic | LinkedSchematic[] | null;
   issue: { id: string; status: string; severity: string; title: string }[] | { id: string; status: string; severity: string; title: string } | null;
@@ -46,6 +52,7 @@ export interface Draft {
   width?: number;
   height?: number;
   linked_schematic_id?: string | null;
+  path?: Path;
 }
 
 export interface ViewerProps {
@@ -59,6 +66,15 @@ export interface ViewerProps {
   canReport: boolean;
   members: { user_id: string; name: string }[];
   groups: { id: string; name: string }[];
+  focusId: string | null;
+  crumbs: { label: string; href: string | null }[];
+  backTo: { id: string; title: string } | null;
+  referencedFrom: { annotationId: string; schematicId: string; page: number; title: string }[];
+  currentRevision: string;
+  revisions: { id: string; label: string; at: string }[];
+  /** Set when an older, superseded revision is being viewed. */
+  viewRevision: { id: string; label: string } | null;
+  canRevise: boolean;
 }
 
 export const STATUS_COLOR: Record<string, string> = {
@@ -83,4 +99,14 @@ export async function api<T = unknown>(url: string, init?: RequestInit): Promise
     throw new Error(Array.isArray(d) ? d.map((x: { path: string; message: string }) => `${x.path}: ${x.message}`).join("; ") : (body?.error?.message ?? `Request failed (${res.status})`));
   }
   return body as T;
+}
+
+/** URL that opens an annotation's linked drawing (on the chosen page / pin), remembering where you came from. */
+export function linkHref(a: Ann, fromSchematicId: string): string | null {
+  const l = one(a.linked);
+  if (!l) return null;
+  const q = new URLSearchParams({ from: fromSchematicId });
+  if (a.linked_page) q.set("page", String(a.linked_page));
+  if (a.linked_annotation_id) q.set("focus", a.linked_annotation_id);
+  return `/schematics/${l.id}?${q.toString()}`;
 }
