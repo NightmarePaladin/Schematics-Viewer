@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Page, PageHeader, fmtDate } from "@/components/ui-bits";
+import { AccessibilityPanel } from "@/components/accessibility-panel";
 import { ToolLimitsCard } from "@/components/tool-limits-card";
 import { requireOrgPage } from "@/lib/auth";
 import type { ToolLimits } from "@/lib/tool-limits";
@@ -28,6 +29,10 @@ export default async function SettingsPage() {
             <div className="text-muted-foreground">Organization: {org?.name} (created {fmtDate(org?.created_at)})</div>
             <div className="text-muted-foreground">Your role: <span className="capitalize">{m?.role.replace("_", " ")}</span></div>
           </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Display and accessibility</CardTitle></CardHeader>
+          <CardContent><AccessibilityPanel /></CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle>Tool permissions</CardTitle></CardHeader>

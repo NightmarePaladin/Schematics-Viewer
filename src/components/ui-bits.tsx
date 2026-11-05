@@ -56,7 +56,7 @@ export const SeverityBadge = ({ severity }: { severity: string }) => (
   <Badge variant="secondary" className={cn("capitalize", SEVERITY[severity])}>{severity}</Badge>
 );
 export const IssueStatusBadge = ({ status }: { status: string }) => (
-  <Badge variant="secondary" className={cn("capitalize", ISSUE[status])}>{label(status)}</Badge>
+  <Badge variant="secondary" data-status={status} className={cn("capitalize", ISSUE[status])}>{label(status)}</Badge>
 );
 
 export function Empty({ children }: { children: React.ReactNode }) {

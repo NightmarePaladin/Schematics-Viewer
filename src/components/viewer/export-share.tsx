@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useA11y } from "@/components/accessibility-provider";
 import { Input } from "@/components/ui/input";
 import { selectClass } from "@/components/ui-bits";
 import { buildExport } from "@/lib/export-pdf";
@@ -48,6 +49,7 @@ interface Props {
 
 /** One dialog for both: download a PDF with the notes drawn on, or create an expiring link to a snapshot of it. */
 export function ExportShareDialog(p: Props) {
+  const { prefs } = useA11y();
   const [withNotes, setWithNotes] = useState(true);
   const [summary, setSummary] = useState(true);
   const [busy, setBusy] = useState<null | "export" | "share">(null);
@@ -61,10 +63,10 @@ export function ExportShareDialog(p: Props) {
     if (!p.pdf) throw new Error("The drawing is still loading.");
     const bytes = await p.pdf.getData();
     return buildExport({
-      pdfBytes: bytes, annotations: p.annotations, title: p.title, revision: p.revision, exportedBy: p.userName,
+      pdfBytes: bytes, palette: prefs.cvd, annotations: p.annotations, title: p.title, revision: p.revision, exportedBy: p.userName,
       includeAnnotations: withNotes && hasNotes, summaryPage: summary && withNotes && hasNotes,
     });
-  }, [p.pdf, p.annotations, p.title, p.revision, p.userName, withNotes, summary, hasNotes]);
+  }, [p.pdf, p.annotations, p.title, p.revision, p.userName, withNotes, summary, hasNotes, prefs.cvd]);
 
   const loadShares = useCallback(async () => {
     try {

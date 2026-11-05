@@ -1,3 +1,4 @@
+import { statusVar } from "@/lib/accessibility";
 import type { PermLevel } from "@/lib/permissions";
 
 export type AnnType = "point" | "comment" | "box" | "callout" | "pen" | "arrow" | "highlight";
@@ -93,7 +94,8 @@ export const STATUS_COLOR: Record<string, string> = {
   none: "#d97706",
 };
 
-export const colorFor = (status: string | null) => STATUS_COLOR[status ?? "none"];
+/** Marker / badge colour for a status. A CSS variable, so it follows the viewer's colour palette (see src/lib/accessibility.ts). */
+export const colorFor = (status: string | null) => statusVar(status);
 
 export function one<T>(v: T | T[] | null | undefined): T | null {
   return Array.isArray(v) ? (v[0] ?? null) : (v ?? null);

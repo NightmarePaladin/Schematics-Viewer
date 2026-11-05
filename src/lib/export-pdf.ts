@@ -4,6 +4,7 @@
  * The original file is never modified.
  */
 import type { PDFFont, PDFPage } from "pdf-lib";
+import { PALETTES, type A11yPrefs } from "@/lib/accessibility";
 import type { Ann, Path } from "@/components/viewer/types";
 
 export interface ExportOptions {
@@ -14,15 +15,15 @@ export interface ExportOptions {
   includeAnnotations: boolean;
   summaryPage: boolean;
   exportedBy?: string;
+  /** colour palette for status colours (defaults to the standard one) */
+  palette?: A11yPrefs["cvd"];
 }
 
-const COLOR: Record<string, [number, number, number]> = {
-  open: [0.863, 0.149, 0.149],
-  in_progress: [0.008, 0.518, 0.78],
-  resolved: [0.086, 0.639, 0.29],
-  none: [0.851, 0.467, 0.024],
-};
-const colorOf = (status: string | null): [number, number, number] => COLOR[status ?? "none"] ?? COLOR.none;
+const hex = (h: string): [number, number, number] => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
+function colorOf(status: string | null, palette: A11yPrefs["cvd"]): [number, number, number] {
+  const p = PALETTES[palette] ?? PALETTES.none;
+  return hex(status === "open" || status === "in_progress" || status === "resolved" ? p[status] : p.none);
+}
 
 /** Standard PDF fonts only cover Latin-1: swap common typographic characters and replace anything else. */
 export function clean(text: string): string {
@@ -75,7 +76,7 @@ export async function buildExport(o: ExportOptions): Promise<Uint8Array> {
     for (const { a, n } of numbered) {
       const page = pages[a.page_number - 1];
       if (!page) continue;
-      drawAnnotation(page, a, n, { rgb, degrees, bold });
+      drawAnnotation(page, a, n, { rgb, degrees, bold, palette: o.palette ?? "none" });
     }
   }
 
@@ -93,12 +94,12 @@ export async function buildExport(o: ExportOptions): Promise<Uint8Array> {
 
 type Pdf = typeof import("pdf-lib");
 
-function drawAnnotation(page: PDFPage, a: Ann, n: number, k: { rgb: Pdf["rgb"]; degrees: Pdf["degrees"]; bold: PDFFont }) {
+function drawAnnotation(page: PDFPage, a: Ann, n: number, k: { rgb: Pdf["rgb"]; degrees: Pdf["degrees"]; bold: PDFFont; palette: A11yPrefs["cvd"] }) {
   const { rgb, degrees, bold } = k;
   const rot = page.getRotation().angle;
   const { width: W, height: H } = page.getSize();
   const u = (x: number, y: number) => toUser(x, y, W, H, rot);
-  const [r, g, b] = colorOf(a.status);
+  const [r, g, b] = colorOf(a.status, k.palette);
   const col = rgb(r, g, b);
   const badge = (x: number, y: number, size = 8) => {
     page.drawCircle({ x, y, size, color: col, borderColor: rgb(1, 1, 1), borderWidth: 1 });
