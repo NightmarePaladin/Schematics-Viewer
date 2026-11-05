@@ -1,6 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Page, PageHeader, fmtDate } from "@/components/ui-bits";
+import { ToolLimitsCard } from "@/components/tool-limits-card";
 import { requireOrgPage } from "@/lib/auth";
+import type { ToolLimits } from "@/lib/tool-limits";
 
 export const metadata = { title: "Settings" };
 
@@ -13,7 +15,7 @@ const ROLES = [
 
 export default async function SettingsPage() {
   const s = await requireOrgPage();
-  const { data: org } = await s.supabase.from("organizations").select("name, created_at").eq("id", s.orgId).single();
+  const { data: org } = await s.supabase.from("organizations").select("name, created_at, tool_limits").eq("id", s.orgId).single();
   const m = s.memberships.find((x) => x.org_id === s.orgId);
   return (
     <Page className="max-w-3xl">
@@ -26,6 +28,10 @@ export default async function SettingsPage() {
             <div className="text-muted-foreground">Organization: {org?.name} (created {fmtDate(org?.created_at)})</div>
             <div className="text-muted-foreground">Your role: <span className="capitalize">{m?.role.replace("_", " ")}</span></div>
           </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Tool permissions</CardTitle></CardHeader>
+          <CardContent><ToolLimitsCard initial={(org?.tool_limits ?? {}) as ToolLimits} canEdit={s.role === "admin"} /></CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle>Roles in this workspace</CardTitle></CardHeader>
