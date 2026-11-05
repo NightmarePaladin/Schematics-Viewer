@@ -11,6 +11,7 @@ import { selectClass } from "@/components/ui-bits";
 import { buildExport } from "@/lib/export-pdf";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import type { Ann } from "./types";
+import { cn } from "@/lib/utils";
 
 interface Share {
   id: string;
@@ -175,7 +176,7 @@ export function ExportShareDialog(p: Props) {
               </div>
               <div>
                 <label htmlFor="share-expiry" className="mb-1 block text-xs text-muted-foreground">Expires after</label>
-                <select id="share-expiry" value={expiry} onChange={(e) => setExpiry(Number(e.target.value))} className={`${selectClass} w-28`}>
+                <select id="share-expiry" value={expiry} onChange={(e) => setExpiry(Number(e.target.value))} className={cn(selectClass, "w-28")}>
                   {EXPIRY.map(([t, s]) => <option key={s} value={s}>{t}</option>)}
                 </select>
               </div>

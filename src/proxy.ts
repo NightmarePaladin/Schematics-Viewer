@@ -37,9 +37,9 @@ export async function proxy(request: NextRequest) {
   const isApi = pathname.startsWith("/api/");
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   if (!signedIn && !isPublic && !isApi) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("next", pathname);
+    // Send them back to exactly where they were going, query included (a scanned QR label carries ?open=drawing).
+    const url = new URL("/login", request.url);
+    url.searchParams.set("next", pathname + request.nextUrl.search);
     return NextResponse.redirect(url);
   }
   if (signedIn && (pathname === "/login" || pathname === "/signup")) {

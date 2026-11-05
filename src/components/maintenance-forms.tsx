@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { selectClass } from "@/components/ui-bits";
 import { LOG_TYPES, SEVERITIES } from "@/lib/schemas";
+import { cn } from "@/lib/utils";
 
 async function post(url: string, payload: unknown) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -41,7 +42,7 @@ export function LogForm({ machineId }: { machineId: string }) {
   return (
     <form onSubmit={onSubmit} className="space-y-2" aria-label="Add maintenance log entry">
       <div className="flex gap-2">
-        <select name="entry_type" className={`${selectClass} w-36`} aria-label="Entry type" defaultValue="note">
+        <select name="entry_type" className={cn(selectClass, "w-36")} aria-label="Entry type" defaultValue="note">
           {LOG_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
         <Input name="body" required maxLength={4000} placeholder="What was done or observed?" aria-label="Log entry" />

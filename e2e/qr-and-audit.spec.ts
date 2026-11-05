@@ -37,7 +37,7 @@ test("QR labels: a sheet for every visible machine, and a single printable label
   const labels = page.getByTestId("machine-label");
   expect(await labels.count()).toBeGreaterThanOrEqual(5); // sub-machines get labels too: they are the things you stick them on
   for (const url of await labels.evaluateAll((els) => els.map((e) => e.getAttribute("data-qr-url")))) {
-    expect(url).toMatch(/\/machines\/[0-9a-f-]{36}$/);
+    expect(url).toMatch(/\/machines\/[0-9a-f-]{36}\?open=drawing$/); // a scan opens the drawing straight away when there is exactly one
   }
   await expect(page.getByRole("img", { name: "QR code linking to Hydraulic Press 7" })).toBeVisible();
   await expect(sheet).toContainText("Hydraulic Press 7");
@@ -54,14 +54,14 @@ test("QR labels: a sheet for every visible machine, and a single printable label
   await expect(label).toContainText("Hydraulic Press 7");
   await expect(label).toContainText("Forgeworks HP-450");
   pressUrl = (await label.getAttribute("data-qr-url"))!;
-  expect(pressUrl).toMatch(/\/machines\/[0-9a-f-]{36}$/);
+  expect(pressUrl).toMatch(/\/machines\/[0-9a-f-]{36}\?open=drawing$/);
   await expect(page.getByRole("link", { name: "Download PNG" })).toBeVisible();
   await page.screenshot({ path: "test-results/flow-qr-label.png" });
 });
 
 test("the QR image really scans to the machine URL (PNG and SVG endpoints)", async ({ page }) => {
   await signIn(page, "admin@schematichub.test");
-  const id = pressUrl.split("/").pop()!;
+  const id = pressUrl.split("/").pop()!.split("?")[0];
 
   const png = await page.request.get(`/api/machines/${id}/qr?format=png&size=600`);
   expect(png.status()).toBe(200);
@@ -83,13 +83,14 @@ test("scanning while signed out sends you to sign in, then straight to the machi
   await page.getByLabel("Email").fill("tech@schematichub.test");
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(new RegExp(`${path}$`));
-  await expect(page.getByRole("heading", { name: "Hydraulic Press 7" })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`${path}(\\?open=drawing)?$`));
+  // the scan lands on the machine, or straight on its drawing when the machine has exactly one (?open=drawing)
+  await expect(page.getByRole("heading", { name: "Hydraulic Press 7" }).or(page.getByTestId("schematic-viewer"))).toBeVisible();
   await ctx.close();
 });
 
 test("the QR image endpoint is protected: signed-out 401, other organization 404, invalid id 404", async ({ browser, request }) => {
-  const id = pressUrl.split("/").pop()!;
+  const id = pressUrl.split("/").pop()!.split("?")[0];
   expect((await request.get(`/api/machines/${id}/qr`)).status()).toBe(401);
 
   const ctx = await browser.newContext();
