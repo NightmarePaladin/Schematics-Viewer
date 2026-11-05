@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,31 @@ import { IssueStatusBadge, SeverityBadge, fmtDate, selectClass } from "@/compone
 import { levelAtLeast, type PermLevel } from "@/lib/permissions";
 import { ISSUE_STATUSES, SEVERITIES } from "@/lib/schemas";
 import { api, colorFor, one, type Ann, type Draft, type Reply } from "./types";
+
+interface LinkOption { id: string; title: string; machine_name: string }
+
+/** Drawings of this machine's sub-parts that an annotation may link to (empty when the machine has none). */
+function useLinkable(schematicId: string) {
+  const [opts, setOpts] = useState<LinkOption[]>([]);
+  useEffect(() => {
+    let off = false;
+    api<{ data: LinkOption[] }>(`/api/schematics/${schematicId}/linkable`).then((r) => { if (!off) setOpts(r.data); }).catch(() => {});
+    return () => { off = true; };
+  }, [schematicId]);
+  return opts;
+}
+
+function LinkSelect({ id, value, onChange, opts, disabled }: { id: string; value: string; onChange: (v: string) => void; opts: LinkOption[]; disabled?: boolean }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs text-muted-foreground" htmlFor={id}>Links to schematic</label>
+      <select id={id} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={selectClass}>
+        <option value="">No link</option>
+        {opts.map((o) => <option key={o.id} value={o.id}>{o.title} — {o.machine_name}</option>)}
+      </select>
+    </div>
+  );
+}
 
 const TYPE_LABEL = { point: "Point marker", comment: "Comment", box: "Issue box", callout: "Callout" } as const;
 
@@ -72,6 +98,8 @@ function DraftForm({ draft, schematicId, onCancelDraft, onChanged }: Props & { d
   const needsText = draft.type === "comment" || draft.type === "callout";
   const [body, setBody] = useState("");
   const [status, setStatus] = useState<string>("");
+  const [link, setLink] = useState("");
+  const linkable = useLinkable(schematicId);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,6 +120,7 @@ function DraftForm({ draft, schematicId, onCancelDraft, onChanged }: Props & { d
           ...(draft.width ? { width: draft.width, height: draft.height } : {}),
           body,
           status: status || null,
+          ...(link ? { linked_schematic_id: link } : {}),
         }),
       });
       toast.success("Annotation saved");
@@ -122,6 +151,7 @@ function DraftForm({ draft, schematicId, onCancelDraft, onChanged }: Props & { d
           {ISSUE_STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
         </select>
       </div>
+      {linkable.length > 0 && <LinkSelect id="ann-link" value={link} onChange={setLink} opts={linkable} />}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="flex gap-2">
         <Button type="submit" disabled={busy} data-testid="save-annotation">{busy ? "Saving…" : "Save annotation"}</Button>
@@ -138,6 +168,9 @@ function Thread(p: Props & { ann: Ann; number: number }) {
   const [error, setError] = useState<string | null>(null);
   const [showIssue, setShowIssue] = useState(false);
   const issue = one(ann.issue);
+  const linked = one(ann.linked);
+  const linkable = useLinkable(p.schematicId);
+  const router = useRouter();
   const isAuthor = ann.author_id === p.userId;
   const canEdit = levelAtLeast(p.level, "edit") || (isAuthor && levelAtLeast(p.level, "comment"));
   const canDelete = levelAtLeast(p.level, "manage") || (isAuthor && levelAtLeast(p.level, "comment"));
@@ -168,6 +201,15 @@ function Thread(p: Props & { ann: Ann; number: number }) {
     setError(null);
     try {
       await api(`/api/annotations/${ann.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: status || null }) });
+      await p.onChanged(ann.id);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+  async function setLink(v: string) {
+    setError(null);
+    try {
+      await api(`/api/annotations/${ann.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linked_schematic_id: v || null }) });
       await p.onChanged(ann.id);
     } catch (err) {
       setError((err as Error).message);
@@ -204,6 +246,19 @@ function Thread(p: Props & { ann: Ann; number: number }) {
           </select>
           {canDelete && <Button size="sm" variant="destructive" className="ml-auto" onClick={remove}>Delete</Button>}
         </div>
+
+        {linked && (
+          <div className="flex items-center gap-2 rounded-lg border bg-muted/40 p-2 text-xs" data-testid="linked-schematic">
+            <div className="min-w-0 flex-1">
+              <div className="font-medium">Linked schematic</div>
+              <div className="truncate">{linked.title}{one(linked.machine)?.name ? ` · ${one(linked.machine)!.name}` : ""}</div>
+            </div>
+            <Button size="sm" onClick={() => router.push(`/schematics/${linked.id}`)}>Open</Button>
+          </div>
+        )}
+        {canEdit && (linkable.length > 0 || ann.linked_schematic_id) && (
+          <LinkSelect id="thread-link" value={ann.linked_schematic_id ?? ""} onChange={setLink} opts={linkable} />
+        )}
 
         {issue ? (
           <div className="rounded-lg border bg-muted/40 p-2 text-xs">

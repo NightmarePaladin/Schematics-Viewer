@@ -118,6 +118,7 @@ export const annotationCreateSchema = z
     height: norm.nullish(),
     body: z.string().trim().max(4000).default(""),
     status: z.enum(ISSUE_STATUSES).nullish(),
+    linked_schematic_id: z.string().uuid().nullish(),
   })
   .superRefine((a, ctx) => {
     const needsSize = a.type === "box" || a.type === "callout";
@@ -142,6 +143,7 @@ export const annotationUpdateSchema = z.object({
   y: norm.optional(),
   width: norm.optional(),
   height: norm.optional(),
+  linked_schematic_id: z.string().uuid().nullable().optional(),
 });
 
 export const replyCreateSchema = z.object({

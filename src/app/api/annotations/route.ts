@@ -10,7 +10,7 @@ const listQuery = z.object({
   page: z.coerce.number().int().min(1).optional(),
 });
 
-const SELECT = "*, author:profiles!annotations_author_id_fkey(display_name), replies:annotation_replies(count), issue:maintenance_issues(id, status, severity, title)";
+const SELECT = "*, author:profiles!annotations_author_id_fkey(display_name), replies:annotation_replies(count), issue:maintenance_issues(id, status, severity, title), linked:schematics!annotations_linked_schematic_fkey(id, title, machine:machines(name))";
 
 /** GET /api/annotations?schematic_id=&page= — requires View on the parent schematic (also enforced by RLS). */
 export const GET = handler(async (req) => {
@@ -43,6 +43,7 @@ export const POST = handler(async (req) => {
         height: input.height == null ? null : roundNorm(input.height),
         body: input.body,
         status: input.status ?? null,
+        linked_schematic_id: input.linked_schematic_id ?? null,
         author_id: s.user.id,
       })
       .select(SELECT)

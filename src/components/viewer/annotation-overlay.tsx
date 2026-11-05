@@ -11,7 +11,7 @@ import {
   type NormPoint,
   type Rotation,
 } from "@/lib/coords";
-import { colorFor, type Ann, type AnnType, type Draft } from "./types";
+import { colorFor, one, type Ann, type AnnType, type Draft } from "./types";
 
 export type Tool = "select" | "pan" | AnnType;
 
@@ -120,6 +120,7 @@ export function AnnotationOverlay({
                   strokeDasharray={a.type === "callout" ? "6 3" : undefined} />
                 <circle cx={o.x} cy={o.y} r={10} fill={color} />
                 <text x={o.x} y={o.y + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff">{idx + 1}</text>
+                {one(a.linked) && <LinkBadge x={o.x + 14} y={o.y} color={color} />}
               </g>
             );
           }
@@ -130,6 +131,7 @@ export function AnnotationOverlay({
               {sel && <circle cx={c.x} cy={c.y} r={16} fill="none" stroke={color} strokeWidth={2} />}
               <circle cx={c.x} cy={c.y} r={11} fill={color} stroke="#fff" strokeWidth={2} />
               <text x={c.x} y={c.y + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff">{idx + 1}</text>
+              {one(a.linked) && <LinkBadge x={c.x + 12} y={c.y - 12} color={color} />}
               {a.type === "comment" && <path d={`M${c.x - 4} ${c.y + 10} l4 6 l4 -6 z`} fill={color} />}
             </g>
           );
@@ -146,5 +148,15 @@ export function AnnotationOverlay({
         return <circle data-testid="draft-marker" cx={c.x} cy={c.y} r={11} fill="#d97706" fillOpacity={0.4} stroke="#d97706" strokeDasharray="3 2" strokeWidth={2} pointerEvents="none" />;
       })()}
     </svg>
+  );
+}
+
+/** Small "opens another drawing" arrow on a marker. */
+function LinkBadge({ x, y, color }: { x: number; y: number; color: string }) {
+  return (
+    <g data-testid="link-badge" pointerEvents="none">
+      <circle cx={x} cy={y} r={8} fill="#fff" stroke={color} strokeWidth={1.5} />
+      <path d={`M${x - 3} ${y + 3} L${x + 3} ${y - 3} M${x - 1} ${y - 3} H${x + 3} V${y + 1}`} fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+    </g>
   );
 }

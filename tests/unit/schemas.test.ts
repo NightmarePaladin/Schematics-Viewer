@@ -45,6 +45,13 @@ describe("annotation payload validation", () => {
     expect(annotationCreateSchema.safeParse({ ...base, type: "point", x: 0.5, y: 0.25 }).success).toBe(true);
   });
 
+  it("accepts an optional schematic link and rejects a non-uuid one", () => {
+    const id = "6f1c2b9e-3b4a-4c7e-9d51-0a8f2e7c1b33";
+    expect(annotationCreateSchema.safeParse({ ...base, type: "point", x: 0.5, y: 0.5, linked_schematic_id: id }).success).toBe(true);
+    expect(annotationCreateSchema.safeParse({ ...base, type: "point", x: 0.5, y: 0.5, linked_schematic_id: null }).success).toBe(true);
+    expect(annotationCreateSchema.safeParse({ ...base, type: "point", x: 0.5, y: 0.5, linked_schematic_id: "nope" }).success).toBe(false);
+  });
+
   it("rejects pixel-like coordinates", () => {
     expect(annotationCreateSchema.safeParse({ ...base, type: "point", x: 340, y: 120 }).success).toBe(false);
   });

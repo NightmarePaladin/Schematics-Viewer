@@ -3,6 +3,12 @@ import type { PermLevel } from "@/lib/permissions";
 export type AnnType = "point" | "comment" | "box" | "callout";
 export type IssueStatus = "open" | "in_progress" | "resolved";
 
+export interface LinkedSchematic {
+  id: string;
+  title: string;
+  machine: { name: string } | { name: string }[] | null;
+}
+
 export interface Ann {
   id: string;
   page_number: number;
@@ -17,6 +23,9 @@ export interface Ann {
   created_at: string;
   author: { display_name: string } | { display_name: string }[] | null;
   replies: { count: number }[] | null;
+  linked_schematic_id: string | null;
+  /** The linked drawing, or null when none / not visible to this user. */
+  linked: LinkedSchematic | LinkedSchematic[] | null;
   issue: { id: string; status: string; severity: string; title: string }[] | { id: string; status: string; severity: string; title: string } | null;
 }
 
@@ -36,6 +45,7 @@ export interface Draft {
   y: number;
   width?: number;
   height?: number;
+  linked_schematic_id?: string | null;
 }
 
 export interface ViewerProps {

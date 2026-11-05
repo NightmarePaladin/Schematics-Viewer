@@ -6,7 +6,9 @@ import {
   PanelRightOpen, RotateCw, Square, StickyNote, ZoomIn, ZoomOut, MoveHorizontal,
 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { fitScale, normalizeRotation, type Rotation } from "@/lib/coords";
 import { levelAtLeast } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -14,7 +16,7 @@ import { AnnotationOverlay, type Tool } from "./annotation-overlay";
 import { AnnotationPanel } from "./annotation-panel";
 import { GrantsPanel } from "./grants-panel";
 import { PdfCanvas } from "./pdf-canvas";
-import { api, type Ann, type Draft, type ViewerProps } from "./types";
+import { api, one, type Ann, type Draft, type LinkedSchematic, type ViewerProps } from "./types";
 
 type Zoom = { mode: "width" } | { mode: "page" } | { mode: "custom"; value: number };
 
@@ -71,6 +73,8 @@ export function SchematicViewer(props: ViewerProps) {
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ dist: number; scale: number } | null>(null);
   const [spacePan, setSpacePan] = useState(false); // Space held: temporary pan, whatever tool is active
+  const router = useRouter();
+  const [linkPrompt, setLinkPrompt] = useState<LinkedSchematic | null>(null); // "open the linked drawing?"
   const [pageDraft, setPageDraft] = useState<string | null>(null);
 
   const canComment = levelAtLeast(level, "comment");
@@ -404,7 +408,14 @@ export function SchematicViewer(props: ViewerProps) {
                 selectedId={selectedId}
                 tool={tool}
                 visible={showAnn}
-                onSelect={(id) => { setSelectedId(id); setDraft(null); openPanel(); setTab("notes"); }}
+                onSelect={(id) => {
+                  setSelectedId(id);
+                  setDraft(null);
+                  setTab("notes");
+                  // a part that has its own drawing on file: offer to jump there before covering the screen with the panel
+                  const link = one(annotations.find((a) => a.id === id)?.linked);
+                  if (link) setLinkPrompt(link); else openPanel();
+                }}
                 onDraft={(d) => { setDraft(d); setSelectedId(null); openPanel(); setTab("notes"); setTool("select"); }}
               />
             </div>
@@ -490,6 +501,22 @@ export function SchematicViewer(props: ViewerProps) {
           </aside>
         )}
       </div>
+
+      <Dialog open={!!linkPrompt} onOpenChange={(o) => { if (!o) { setLinkPrompt(null); openPanel(); } }}>
+        <DialogContent data-testid="link-prompt">
+          <DialogHeader>
+            <DialogTitle>Open the schematic for this part?</DialogTitle>
+            <DialogDescription>
+              {linkPrompt?.title}
+              {one(linkPrompt?.machine ?? null)?.name ? ` · ${one(linkPrompt?.machine ?? null)!.name}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" data-testid="link-stay" onClick={() => { setLinkPrompt(null); openPanel(); }}>Stay here</Button>
+            <Button data-testid="link-open" onClick={() => { const id = linkPrompt!.id; setLinkPrompt(null); router.push(`/schematics/${id}`); }}>Open schematic</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* phones: a tab docked at the bottom; tap to pull the panel up */}
       {!sheet && (
