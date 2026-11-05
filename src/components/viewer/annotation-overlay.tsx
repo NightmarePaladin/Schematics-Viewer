@@ -149,7 +149,8 @@ export function AnnotationOverlay({
             onClick: (e: React.MouseEvent) => { e.stopPropagation(); onSelect(a.id); },
             onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(a.id); } },
           };
-          const linkBadge = (x: number, y: number) => (one(a.linked) ? <LinkBadge x={x} y={y} color={color} /> : null);
+          const linkBadge = (x: number, y: number) =>
+            one(a.linked) || a.link_broken_at ? <LinkBadge x={x} y={y} color={color} broken={!!a.link_broken_at} /> : null;
 
           if ((a.type === "pen" || a.type === "arrow") && a.path && a.path.length >= 2) {
             const pts = pathPx(a.path);
@@ -222,7 +223,16 @@ export function AnnotationOverlay({
 }
 
 /** Small "opens another drawing" arrow on a marker. */
-function LinkBadge({ x, y, color }: { x: number; y: number; color: string }) {
+function LinkBadge({ x, y, color, broken }: { x: number; y: number; color: string; broken?: boolean }) {
+  if (broken) {
+    // red "!" : the linked part was moved away or deleted
+    return (
+      <g data-testid="link-badge-broken" pointerEvents="none">
+        <circle cx={x} cy={y} r={8} fill="#fff" stroke="#dc2626" strokeWidth={1.5} strokeDasharray="3 2" />
+        <path d={`M${x} ${y - 4} V${y + 1} M${x} ${y + 3.5} V${y + 3.6}`} fill="none" stroke="#dc2626" strokeWidth={1.8} strokeLinecap="round" />
+      </g>
+    );
+  }
   return (
     <g data-testid="link-badge" pointerEvents="none">
       <circle cx={x} cy={y} r={8} fill="#fff" stroke={color} strokeWidth={1.5} />

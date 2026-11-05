@@ -25,6 +25,9 @@ export interface Ann {
   author: { display_name: string } | { display_name: string }[] | null;
   replies: { count: number }[] | null;
   linked_schematic_id: string | null;
+  /** Set when the linked part was moved away or deleted: the link is no longer valid. */
+  link_broken_at: string | null;
+  link_broken_note: string | null;
   linked_page: number | null;
   linked_annotation_id: string | null;
   path: Path | null;
@@ -104,7 +107,7 @@ export async function api<T = unknown>(url: string, init?: RequestInit): Promise
 /** URL that opens an annotation's linked drawing (on the chosen page / pin), remembering where you came from. */
 export function linkHref(a: Ann, fromSchematicId: string): string | null {
   const l = one(a.linked);
-  if (!l) return null;
+  if (!l || a.link_broken_at) return null; // a broken link must not be followed
   const q = new URLSearchParams({ from: fromSchematicId });
   if (a.linked_page) q.set("page", String(a.linked_page));
   if (a.linked_annotation_id) q.set("focus", a.linked_annotation_id);

@@ -29,7 +29,7 @@ export interface LinkValue { s: string; a: string; p: string }
 const NO_LINK: LinkValue = { s: "", a: "", p: "" };
 
 /** Choose a sub-machine drawing and, optionally, a page or a specific pin on it to open on. */
-function LinkField({ id, value, onChange, opts, disabled }: { id: string; value: LinkValue; onChange: (v: LinkValue) => void; opts: LinkOption[]; disabled?: boolean }) {
+function LinkField({ id, value, onChange, opts, disabled, label }: { id: string; value: LinkValue; onChange: (v: LinkValue) => void; opts: LinkOption[]; disabled?: boolean; label?: string }) {
   const [pins, setPins] = useState<Ann[]>([]);
   useEffect(() => {
     if (!value.s) return;
@@ -41,7 +41,7 @@ function LinkField({ id, value, onChange, opts, disabled }: { id: string; value:
   return (
     <div className="space-y-2">
       <div>
-        <label className="mb-1 block text-xs text-muted-foreground" htmlFor={id}>Links to schematic</label>
+        <label className="mb-1 block text-xs text-muted-foreground" htmlFor={id}>{label ?? "Links to schematic"}</label>
         <select id={id} value={value.s} disabled={disabled} onChange={(e) => onChange(e.target.value ? { s: e.target.value, a: "", p: "" } : NO_LINK)} className={selectClass}>
           <option value="">No link</option>
           {opts.map((o) => <option key={o.id} value={o.id}>{o.title} — {o.machine_name}</option>)}
@@ -157,6 +157,7 @@ export function AnnotationPanel(p: Props) {
                 <span className="block text-xs text-muted-foreground">
                   p.{a.page_number} · {one(a.author)?.display_name} · {a.replies?.[0]?.count ?? 0} repl{(a.replies?.[0]?.count ?? 0) === 1 ? "y" : "ies"}
                   {(a.attachments?.[0]?.count ?? 0) > 0 && ` · ${a.attachments![0].count} attached`}
+                  {a.link_broken_at && <span className="ml-1 rounded bg-destructive/15 px-1 text-destructive" title={a.link_broken_note ?? "The linked part was removed"}>link broken</span>}
                   {a.schematic_revision && a.schematic_revision !== p.currentRevision && <span className="ml-1 rounded bg-amber-500/20 px-1 text-amber-700 dark:text-amber-400" title="Placed on an earlier revision: check its position">rev {a.schematic_revision}</span>}
                 </span>
               </span>
@@ -245,6 +246,7 @@ function Thread(p: Props & { ann: Ann; number: number }) {
   const [showIssue, setShowIssue] = useState(false);
   const issue = one(ann.issue);
   const linked = one(ann.linked);
+  const broken = !!ann.link_broken_at;
   const linkable = useLinkable(p.schematicId);
   const router = useRouter();
   const isAuthor = ann.author_id === p.userId;
@@ -291,6 +293,11 @@ function Thread(p: Props & { ann: Ann; number: number }) {
       setError((err as Error).message);
     }
   }
+  async function removeLink() {
+    if (!confirm("Remove this link permanently? The note about the removed part will be discarded too.")) return;
+    await setLink(NO_LINK);
+    toast.success("Link removed");
+  }
   async function remove() {
     if (!confirm("Delete this annotation and its replies?")) return;
     try {
@@ -323,7 +330,21 @@ function Thread(p: Props & { ann: Ann; number: number }) {
           {canDelete && <Button size="sm" variant="destructive" className="ml-auto" onClick={remove}>Delete</Button>}
         </div>
 
-        {linked && (
+        {broken && (
+          <div role="alert" data-testid="broken-link" className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 p-2 text-xs">
+            <div className="font-medium">Link no longer valid</div>
+            <p>{ann.link_broken_note}</p>
+            {canEdit && !p.readOnly ? (
+              <>
+                <p>Choose another part below to replace it, or remove the link.</p>
+                <Button size="sm" variant="destructive" data-testid="remove-link" onClick={removeLink}>Remove link permanently</Button>
+              </>
+            ) : (
+              <p>Ask someone with edit access to replace or remove it.</p>
+            )}
+          </div>
+        )}
+        {linked && !broken && (
           <div className="flex items-center gap-2 rounded-lg border bg-muted/40 p-2 text-xs" data-testid="linked-schematic">
             <div className="min-w-0 flex-1">
               <div className="font-medium">Linked schematic</div>
@@ -333,7 +354,13 @@ function Thread(p: Props & { ann: Ann; number: number }) {
           </div>
         )}
         {canEdit && !p.readOnly && (linkable.length > 0 || ann.linked_schematic_id) && (
-          <LinkField id="thread-link" value={{ s: ann.linked_schematic_id ?? "", a: ann.linked_annotation_id ?? "", p: ann.linked_page ? String(ann.linked_page) : "" }} onChange={setLink} opts={linkable} />
+          <LinkField
+            id="thread-link"
+            label={broken ? "Replace with another part" : undefined}
+            value={broken ? NO_LINK : { s: ann.linked_schematic_id ?? "", a: ann.linked_annotation_id ?? "", p: ann.linked_page ? String(ann.linked_page) : "" }}
+            onChange={setLink}
+            opts={linkable}
+          />
         )}
         {ann.schematic_revision && ann.schematic_revision !== p.currentRevision && (
           <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-xs" data-testid="stale-note">

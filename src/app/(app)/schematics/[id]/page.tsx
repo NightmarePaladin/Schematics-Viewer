@@ -50,7 +50,7 @@ export default async function ViewerPage({
 
   // Where this drawing is referenced from (links placed on parent drawings), and its revision history.
   const [{ data: refs }, { data: revs }] = await Promise.all([
-    s.supabase.from("annotations").select("id, page_number, schematic_id").eq("linked_schematic_id", id),
+    s.supabase.from("annotations").select("id, page_number, schematic_id").eq("linked_schematic_id", id).is("link_broken_at", null),
     s.supabase.from("schematic_revisions").select("id, revision, superseded_at").eq("schematic_id", id).order("superseded_at", { ascending: false }),
   ]);
   const refSchematics = refs?.length
