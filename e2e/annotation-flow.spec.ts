@@ -55,7 +55,8 @@ test("1-7: sign in, create machine, upload PDF, annotate, reload, position persi
   await expect(page).toHaveURL(/\/schematics\/[0-9a-f-]{36}/);
   schematicUrl = page.url();
   await waitForCanvas(page);
-  await expect(page.getByTestId("page-indicator")).toContainText("1 / 2");
+  await expect(page.getByLabel("Go to page")).toHaveValue("1");
+  await expect(page.getByTestId("page-indicator")).toContainText("/ 2");
 
   // 5. create a pinned annotation
   await page.getByTestId("tool-point").click();

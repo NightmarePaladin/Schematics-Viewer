@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, EyeOff, Hand, Maximize2, MessageSquare, MousePointer2, MapPin, PanelRightClose,
   PanelRightOpen, RotateCw, Square, StickyNote, ZoomIn, ZoomOut, MoveHorizontal,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { fitScale, normalizeRotation, type Rotation } from "@/lib/coords";
 import { levelAtLeast } from "@/lib/permissions";
@@ -18,13 +18,13 @@ import { api, type Ann, type Draft, type ViewerProps } from "./types";
 
 type Zoom = { mode: "width" } | { mode: "page" } | { mode: "custom"; value: number };
 
-const TOOLS: { id: Tool; label: string; icon: React.ElementType; needs: "view" | "comment" }[] = [
-  { id: "select", label: "Select", icon: MousePointer2, needs: "view" },
-  { id: "pan", label: "Pan", icon: Hand, needs: "view" },
-  { id: "point", label: "Point marker", icon: MapPin, needs: "comment" },
-  { id: "comment", label: "Text comment", icon: MessageSquare, needs: "comment" },
-  { id: "box", label: "Issue box", icon: Square, needs: "comment" },
-  { id: "callout", label: "Quote / callout", icon: StickyNote, needs: "comment" },
+const TOOLS: { id: Tool; key: string; label: string; icon: React.ElementType; needs: "view" | "comment" }[] = [
+  { id: "select", key: "V", label: "Select", icon: MousePointer2, needs: "view" },
+  { id: "pan", key: "H", label: "Pan", icon: Hand, needs: "view" },
+  { id: "point", key: "P", label: "Point marker", icon: MapPin, needs: "comment" },
+  { id: "comment", key: "C", label: "Text comment", icon: MessageSquare, needs: "comment" },
+  { id: "box", key: "B", label: "Issue box", icon: Square, needs: "comment" },
+  { id: "callout", key: "Q", label: "Quote / callout", icon: StickyNote, needs: "comment" },
 ];
 
 /** md breakpoint (768px). Desktop: side panel. Phone: bottom sheet, closed until asked for. */
@@ -65,6 +65,13 @@ export function SchematicViewer(props: ViewerProps) {
   const [box, setBox] = useState({ width: 800, height: 600 });
   const scroller = useRef<HTMLDivElement>(null);
   const panning = useRef<{ x: number; y: number; sl: number; st: number } | null>(null);
+  const frame = useRef<HTMLDivElement>(null);
+  /** Where on screen (and where on the page, as fractions) a zoom should stay anchored. */
+  const anchor = useRef<{ cx: number; cy: number; fx: number; fy: number } | null>(null);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ dist: number; scale: number } | null>(null);
+  const [spacePan, setSpacePan] = useState(false); // Space held: temporary pan, whatever tool is active
+  const [pageDraft, setPageDraft] = useState<string | null>(null);
 
   const canComment = levelAtLeast(level, "comment");
   const canManage = levelAtLeast(level, "manage");
@@ -139,22 +146,80 @@ export function SchematicViewer(props: ViewerProps) {
   }, [baseSize, zoom, box, isDesktop]);
   const shown = baseSize ? { width: baseSize.width * scale, height: baseSize.height * scale } : null;
 
-  const step = (dir: 1 | -1) => setZoom({ mode: "custom", value: Math.min(8, Math.max(0.1, +(scale * (dir > 0 ? 1.25 : 0.8)).toFixed(3))) });
+  /** Zoom to an absolute scale, keeping the page point under (clientX, clientY) fixed (defaults to the viewport centre). */
+  const zoomTo = (next: number, clientX?: number, clientY?: number) => {
+    const el = scroller.current;
+    const fr = frame.current;
+    if (el && fr) {
+      const er = el.getBoundingClientRect();
+      const r = fr.getBoundingClientRect();
+      const cx = clientX ?? er.left + er.width / 2;
+      const cy = clientY ?? er.top + er.height / 2;
+      anchor.current = {
+        cx, cy,
+        fx: r.width ? Math.min(1, Math.max(0, (cx - r.left) / r.width)) : 0.5,
+        fy: r.height ? Math.min(1, Math.max(0, (cy - r.top) / r.height)) : 0.5,
+      };
+    }
+    setZoom({ mode: "custom", value: Math.min(8, Math.max(0.1, +next.toFixed(3))) });
+  };
+  const step = (dir: 1 | -1) => zoomTo(scale * (dir > 0 ? 1.25 : 0.8));
+  const scaleRef = useRef(scale);
+  useLayoutEffect(() => { scaleRef.current = scale; });
+
+  // After the page resizes, scroll so the anchored point is still under the finger / cursor.
+  useLayoutEffect(() => {
+    const a = anchor.current;
+    const el = scroller.current;
+    const fr = frame.current;
+    if (!a || !el || !fr) return;
+    anchor.current = null;
+    const r = fr.getBoundingClientRect();
+    el.scrollLeft += r.left + a.fx * r.width - a.cx;
+    el.scrollTop += r.top + a.fy * r.height - a.cy;
+  }, [scale]);
+
+  // Ctrl/⌘ + wheel (also how a trackpad pinch arrives) zooms at the cursor instead of zooming the whole browser page.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      zoomTo(scaleRef.current * Math.exp(-e.deltaY * (e.ctrlKey && !e.metaKey ? 0.01 : 0.0025)), e.clientX, e.clientY);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  });
+
   const goto = (n: number) => { setSelectedId(null); setDraft(null); setPageNum(Math.min(Math.max(1, n), Math.max(1, numPages))); };
   const rotate = () => setRotation((r) => normalizeRotation(r + 90));
 
   useEffect(() => {
+    const typing = (t: HTMLElement) => ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName) || t.isContentEditable;
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement;
-      if (["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName)) return;
-      if (e.key === "+" || e.key === "=") step(1);
-      else if (e.key === "-") step(-1);
-      else if (e.key === "PageDown" || e.key === "ArrowRight") goto(pageNum + 1);
-      else if (e.key === "PageUp" || e.key === "ArrowLeft") goto(pageNum - 1);
-      else if (e.key === "Escape") { setDraft(null); setSelectedId(null); setTool("select"); }
+      if (typing(e.target as HTMLElement) || e.ctrlKey || e.metaKey || e.altKey) return;
+      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      if (k === " ") { setSpacePan(true); e.preventDefault(); return; }
+      const t = TOOLS.find((x) => x.key.toLowerCase() === k && levelAtLeast(level, x.needs));
+      if (t) { setTool(t.id); if (t.id !== "select" && t.id !== "pan") setSelectedId(null); return; }
+      if (k === "+" || k === "=") step(1);
+      else if (k === "-") step(-1);
+      else if (k === "w") setZoom({ mode: "width" });
+      else if (k === "f") setZoom({ mode: "page" });
+      else if (k === "r") rotate();
+      else if (k === "a") setShowAnn((v) => !v);
+      else if (k === "]" ) setSidebar((v) => !v);
+      else if (k === "PageDown" || k === "ArrowRight") goto(pageNum + 1);
+      else if (k === "PageUp" || k === "ArrowLeft") goto(pageNum - 1);
+      else if (k === "Escape") { setDraft(null); setSelectedId(null); setTool("select"); }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === " ") { setSpacePan(false); panning.current = null; }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKeyUp);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("keyup", onKeyUp); };
   });
 
   // On a phone the sheet covers the lower part of the screen: bring a freshly placed pin into the visible upper area.
@@ -186,19 +251,33 @@ export function SchematicViewer(props: ViewerProps) {
         <div className="flex min-w-0 flex-1 items-center gap-1 md:flex-none">
           <div className="mr-1 min-w-0 truncate text-sm font-medium max-md:flex-1 md:mr-2 md:max-w-xs">{props.title}</div>
           <ToolButton variant="ghost" aria-label="Previous page" onClick={() => goto(pageNum - 1)} disabled={pageNum <= 1}><ChevronLeft /></ToolButton>
-          <span className="text-sm tabular-nums" data-testid="page-indicator">{pageNum} / {numPages || "–"}</span>
+          <span className="flex items-center gap-1 text-sm tabular-nums" data-testid="page-indicator">
+            <input
+              aria-label="Go to page"
+              inputMode="numeric"
+              className="h-7 w-10 rounded border bg-transparent text-center text-sm tabular-nums"
+              value={pageDraft ?? String(pageNum)}
+              onFocus={(e) => e.currentTarget.select()}
+              onChange={(e) => setPageDraft(e.target.value.replace(/\D/g, ""))}
+              onBlur={() => { if (pageDraft) goto(parseInt(pageDraft, 10)); setPageDraft(null); }}
+              onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); else if (e.key === "Escape") { setPageDraft(null); e.currentTarget.blur(); } }}
+            />
+            <span>/ {numPages || "–"}</span>
+          </span>
           <ToolButton variant="ghost" aria-label="Next page" onClick={() => goto(pageNum + 1)} disabled={pageNum >= numPages}><ChevronRight /></ToolButton>
         </div>
 
-        {/* row 2 on a phone (wraps, so every tool is visible without scrolling); same row as the rest on desktop */}
-        <div className="order-3 flex w-full flex-wrap items-center gap-1 md:order-none md:w-auto md:flex-1 md:flex-nowrap">
+        {/* row 2 on a phone: just the tools (zoom/fit/rotate float over the drawing; pinch also works); same row as the rest on desktop */}
+        <div className="order-3 flex w-full items-center justify-between gap-1 md:order-none md:w-auto md:flex-1 md:flex-nowrap md:justify-start">
+          <div className="hidden items-center gap-1 md:flex">
           <span className="mx-1 hidden h-5 w-px bg-border md:inline-block" />
-          <ToolButton variant="ghost" aria-label="Zoom out" onClick={() => step(-1)}><ZoomOut /></ToolButton>
+          <ToolButton variant="ghost" aria-label="Zoom out" title="Zoom out (−)" onClick={() => step(-1)}><ZoomOut /></ToolButton>
           <span className="w-12 text-center text-sm tabular-nums max-md:hidden" data-testid="zoom-level">{Math.round(scale * 100)}%</span>
-          <ToolButton variant="ghost" aria-label="Zoom in" onClick={() => step(1)}><ZoomIn /></ToolButton>
-          <ToolButton variant={zoom.mode === "width" ? "secondary" : "ghost"} aria-label="Fit to width" onClick={() => setZoom({ mode: "width" })}><MoveHorizontal /></ToolButton>
-          <ToolButton variant={zoom.mode === "page" ? "secondary" : "ghost"} aria-label="Fit to page" onClick={() => setZoom({ mode: "page" })}><Maximize2 /></ToolButton>
-          <ToolButton variant="ghost" aria-label="Rotate view 90 degrees" onClick={rotate}><RotateCw /></ToolButton>
+          <ToolButton variant="ghost" aria-label="Zoom in" title="Zoom in (+)" onClick={() => step(1)}><ZoomIn /></ToolButton>
+          <ToolButton variant={zoom.mode === "width" ? "secondary" : "ghost"} aria-label="Fit to width" title="Fit to width (W)" onClick={() => setZoom({ mode: "width" })}><MoveHorizontal /></ToolButton>
+          <ToolButton variant={zoom.mode === "page" ? "secondary" : "ghost"} aria-label="Fit to page" title="Fit to page (F)" onClick={() => setZoom({ mode: "page" })}><Maximize2 /></ToolButton>
+          <ToolButton variant="ghost" aria-label="Rotate view 90 degrees" title="Rotate (R)" onClick={rotate}><RotateCw /></ToolButton>
+          </div>
           <span className="mx-1 hidden h-5 w-px bg-border md:inline-block" />
           {TOOLS.filter((t) => levelAtLeast(level, t.needs)).map((t) => (
             <ToolButton
@@ -206,7 +285,7 @@ export function SchematicViewer(props: ViewerProps) {
               variant={tool === t.id ? "default" : "ghost"}
               aria-label={t.label}
               aria-pressed={tool === t.id}
-              title={t.label}
+              title={`${t.label} (${t.key})`}
               data-testid={`tool-${t.id}`}
               onClick={() => { setTool(t.id); if (t.id !== "select" && t.id !== "pan") { setSelectedId(null); } }}
             >
@@ -215,7 +294,7 @@ export function SchematicViewer(props: ViewerProps) {
           ))}
           {!canComment && <span className="ml-1 rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">View only</span>}
           <span className="mx-1 hidden h-5 w-px bg-border md:inline-block" />
-          <ToolButton variant="ghost" aria-label={showAnn ? "Hide annotations" : "Show annotations"} aria-pressed={showAnn} data-testid="toggle-annotations" onClick={() => setShowAnn((v) => !v)}>
+          <ToolButton variant="ghost" aria-label={showAnn ? "Hide annotations" : "Show annotations"} aria-pressed={showAnn} title="Show / hide annotations (A)" data-testid="toggle-annotations" onClick={() => setShowAnn((v) => !v)}>
             {showAnn ? <Eye /> : <EyeOff />}
           </ToolButton>
         </div>
@@ -232,23 +311,62 @@ export function SchematicViewer(props: ViewerProps) {
         </ToolButton>
       </div>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
+        {/* phones: zoom / fit / rotate float over the drawing, out of the toolbar */}
+        <div className={cn("absolute bottom-3 right-3 z-30 flex flex-col gap-1 rounded-xl border bg-background/90 p-1 shadow-md backdrop-blur md:hidden", sheet && "hidden")}>
+          <ToolButton variant="ghost" aria-label="Zoom in" onClick={() => step(1)}><ZoomIn /></ToolButton>
+          <ToolButton variant="ghost" aria-label="Zoom out" onClick={() => step(-1)}><ZoomOut /></ToolButton>
+          <ToolButton variant="ghost" aria-label={zoom.mode === "width" ? "Fit to page" : "Fit to width"} onClick={() => setZoom({ mode: zoom.mode === "width" ? "page" : "width" })}>{zoom.mode === "width" ? <Maximize2 /> : <MoveHorizontal />}</ToolButton>
+          <ToolButton variant="ghost" aria-label="Rotate view 90 degrees" onClick={rotate}><RotateCw /></ToolButton>
+        </div>
         <div
           ref={scroller}
           data-testid="viewer-scroller"
-          className={cn("min-w-0 flex-1 overflow-auto bg-muted/60 p-2 md:p-6", tool === "pan" && "cursor-grab", sheet && "max-md:pb-[50dvh]")}
-          style={{ touchAction: tool === "pan" ? "none" : undefined }}
+          className={cn("min-w-0 flex-1 overflow-auto bg-muted/60 p-2 md:p-6", (tool === "pan" || spacePan) && "cursor-grab", sheet && "max-md:pb-[50dvh]")}
+          // pan-x/pan-y: the browser still scrolls with one finger, but leaves two-finger pinch to us (zooms the drawing, not the page)
+          style={{ touchAction: tool === "pan" || spacePan ? "none" : "pan-x pan-y" }}
           onPointerDown={(e) => {
-            if (tool !== "pan" || !scroller.current) return;
-            panning.current = { x: e.clientX, y: e.clientY, sl: scroller.current.scrollLeft, st: scroller.current.scrollTop };
-            scroller.current.setPointerCapture(e.pointerId);
+            const el = scroller.current;
+            if (!el) return;
+            if (e.pointerType === "touch") {
+              pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+              if (pointers.current.size === 2) {
+                const [a, b] = [...pointers.current.values()];
+                pinch.current = { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, scale };
+                setDraft(null);
+                return;
+              }
+            }
+            // desktop: pan tool, Space + drag, or middle mouse button
+            if (tool !== "pan" && !spacePan && e.button !== 1) return;
+            e.preventDefault();
+            panning.current = { x: e.clientX, y: e.clientY, sl: el.scrollLeft, st: el.scrollTop };
+            el.setPointerCapture(e.pointerId);
           }}
           onPointerMove={(e) => {
-            if (!panning.current || !scroller.current) return;
-            scroller.current.scrollLeft = panning.current.sl - (e.clientX - panning.current.x);
-            scroller.current.scrollTop = panning.current.st - (e.clientY - panning.current.y);
+            const el = scroller.current;
+            if (!el) return;
+            if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (pinch.current && pointers.current.size >= 2) {
+              const [a, b] = [...pointers.current.values()];
+              const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+              zoomTo(pinch.current.scale * (d / pinch.current.dist), (a.x + b.x) / 2, (a.y + b.y) / 2);
+              return;
+            }
+            if (!panning.current) return;
+            el.scrollLeft = panning.current.sl - (e.clientX - panning.current.x);
+            el.scrollTop = panning.current.st - (e.clientY - panning.current.y);
           }}
-          onPointerUp={() => { panning.current = null; }}
+          onPointerUp={(e) => {
+            pointers.current.delete(e.pointerId);
+            if (pointers.current.size < 2) pinch.current = null;
+            panning.current = null;
+          }}
+          onPointerCancel={(e) => {
+            pointers.current.delete(e.pointerId);
+            if (pointers.current.size < 2) pinch.current = null;
+            panning.current = null;
+          }}
         >
           {loadError ? (
             <div role="alert" className="mx-auto mt-10 max-w-md rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
@@ -274,7 +392,7 @@ export function SchematicViewer(props: ViewerProps) {
           ) : !page || !shown ? (
             <p className="p-6 text-sm text-muted-foreground" aria-busy="true">Loading drawing…</p>
           ) : (
-            <div className="relative mx-auto w-fit" style={{ width: shown.width, height: shown.height }} data-testid="page-frame" data-page={pageNum}>
+            <div ref={frame} className="relative mx-auto w-fit" style={{ width: shown.width, height: shown.height }} data-testid="page-frame" data-page={pageNum}>
               <PdfCanvas page={page} scale={scale} rotation={rotation} />
               <AnnotationOverlay
                 width={shown.width}
