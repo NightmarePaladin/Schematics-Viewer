@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { check, handler, notFound, parseBody, parseQuery } from "@/lib/api";
+import { check, forbidden, handler, notFound, parseBody, parseQuery } from "@/lib/api";
 import { requireOrg, requireSchematicLevel } from "@/lib/auth";
 import { roundNorm } from "@/lib/coords";
 import { annotationCreateSchema } from "@/lib/schemas";
+import { LIMIT_LABEL, toolAllowed, type ToolLimits } from "@/lib/tool-limits";
 
 const listQuery = z.object({
   schematic_id: z.string().uuid(),
@@ -27,6 +28,10 @@ export const POST = handler(async (req) => {
   const s = await requireOrg();
   const input = await parseBody(req, annotationCreateSchema);
   await requireSchematicLevel(s, input.schematic_id, "comment");
+  const { data: org } = await s.supabase.from("organizations").select("tool_limits").eq("id", s.orgId).maybeSingle();
+  if (!toolAllowed(s.role, input.type, (org?.tool_limits ?? {}) as ToolLimits)) {
+    throw forbidden(`Your role cannot use the ${LIMIT_LABEL[input.type].toLowerCase()} tool in this organization.`);
+  }
   const { data: sch } = await s.supabase.from("schematics").select("org_id").eq("id", input.schematic_id).maybeSingle();
   if (!sch) throw notFound("Schematic");
   const row = check(

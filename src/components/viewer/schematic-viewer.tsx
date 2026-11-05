@@ -3,7 +3,7 @@
 import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
 import {
   ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, EyeOff, Hand, Highlighter, Maximize2, MessageSquare, MousePointer2, MapPin, PanelLeft,
-  PanelRightClose, PanelRightOpen, Pencil, RotateCw, Search, Square, StickyNote, WifiOff, ZoomIn, ZoomOut, MoveHorizontal, MoveUpRight,
+  PanelRightClose, PanelRightOpen, Pencil, RotateCw, Search, Share2, Square, StickyNote, WifiOff, ZoomIn, ZoomOut, MoveHorizontal, MoveUpRight,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -19,6 +19,7 @@ import { AnnotationOverlay, type Tool } from "./annotation-overlay";
 import { AnnotationPanel } from "./annotation-panel";
 import { GrantsPanel } from "./grants-panel";
 import { DetailsPanel } from "./details-panel";
+import { ExportShareDialog } from "./export-share";
 import { PdfCanvas } from "./pdf-canvas";
 import { SearchBar, SearchLayer, usePdfSearch } from "./pdf-search";
 import { Thumbnails } from "./thumbnails";
@@ -96,6 +97,9 @@ export function SchematicViewer(props: ViewerProps) {
   const [offlineCopy, setOfflineCopy] = useState(false);
   const [staleHidden, setStaleHidden] = useState(false);
   const search = usePdfSearch(pdf);
+  const [exportOpen, setExportOpen] = useState(false);
+  /** A tool is offered when the viewer's access allows it AND the organization lets this role use it. */
+  const toolOk = (t: { id: Tool; needs: "view" | "comment" }) => levelAtLeast(level, t.needs) && (t.needs === "view" || props.allowedTools.includes(t.id));
   const [pageDraft, setPageDraft] = useState<string | null>(null);
 
   const canComment = levelAtLeast(level, "comment");
@@ -310,7 +314,7 @@ export function SchematicViewer(props: ViewerProps) {
       if (typing(e.target as HTMLElement) || e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (k === " ") { setSpacePan(true); e.preventDefault(); return; }
-      const t = TOOLS.find((x) => x.key.toLowerCase() === k && levelAtLeast(level, x.needs));
+      const t = TOOLS.find((x) => x.key.toLowerCase() === k && toolOk(x));
       if (t) { setTool(t.id); if (t.id !== "select" && t.id !== "pan") setSelectedId(null); return; }
       if (k === "+" || k === "=") step(1);
       else if (k === "-") step(-1);
@@ -377,6 +381,9 @@ export function SchematicViewer(props: ViewerProps) {
           </span>
           <ToolButton variant="ghost" aria-label="Next page" onClick={() => goto(pageNum + 1)} disabled={pageNum >= numPages}><ChevronRight /></ToolButton>
           <ToolButton variant={search.open ? "secondary" : "ghost"} aria-label="Search this drawing" aria-pressed={search.open} title="Search text (Ctrl+F or /)" data-testid="toggle-search" onClick={() => (search.open ? search.close() : search.setOpen(true))}><Search /></ToolButton>
+          {(props.canExport || props.canShare) && (
+            <ToolButton variant="ghost" aria-label="Export or share" title="Export or share" data-testid="open-export" onClick={() => setExportOpen(true)}><Share2 /></ToolButton>
+          )}
         </div>
 
         {/* row 2 on a phone: just the tools (zoom/fit/rotate float over the drawing; pinch also works); same row as the rest on desktop */}
@@ -394,7 +401,7 @@ export function SchematicViewer(props: ViewerProps) {
           <ToolButton variant="ghost" aria-label="Rotate view 90 degrees" title="Rotate (R)" onClick={rotate}><RotateCw /></ToolButton>
           </div>
           <span className="mx-1 hidden h-5 w-px bg-border md:inline-block" />
-          {TOOLS.filter((t) => !t.markup && levelAtLeast(level, t.needs)).map((t) => (
+          {TOOLS.filter((t) => !t.markup && toolOk(t)).map((t) => (
             <ToolButton
               key={t.id}
               variant={tool === t.id ? "default" : "ghost"}
@@ -407,13 +414,13 @@ export function SchematicViewer(props: ViewerProps) {
               <t.icon />
             </ToolButton>
           ))}
-          {canComment && (
+          {TOOLS.some((t) => t.markup && toolOk(t)) && (
             <ToolButton variant={markupOpen || TOOLS.some((t) => t.markup && t.id === tool) ? "secondary" : "ghost"} className="md:hidden" aria-label="Markup tools" aria-expanded={markupOpen} data-testid="toggle-markup" onClick={() => setMarkupOpen((v) => !v)}><Pencil /></ToolButton>
           )}
           {/* pen / arrow / highlighter: always inline on desktop, a second row on phones */}
           <div className={cn("items-center gap-1 max-md:w-full max-md:basis-full md:flex", markupOpen ? "flex" : "hidden")}>
             <span className="mx-1 hidden h-5 w-px bg-border md:inline-block" />
-            {TOOLS.filter((t) => t.markup && levelAtLeast(level, t.needs)).map((t) => (
+            {TOOLS.filter((t) => t.markup && toolOk(t)).map((t) => (
               <ToolButton
                 key={t.id}
                 variant={tool === t.id ? "default" : "ghost"}
@@ -447,6 +454,11 @@ export function SchematicViewer(props: ViewerProps) {
       </div>
 
       {search.open && <SearchBar s={search} />}
+      <ExportShareDialog
+        open={exportOpen} onOpenChange={setExportOpen} pdf={pdf} annotations={anns} title={props.title}
+        revision={props.viewRevision?.label ?? props.currentRevision} schematicId={schematicId} orgId={props.orgId}
+        userName={props.userName} canExport={props.canExport} canShare={props.canShare && !viewingOld}
+      />
 
       {(props.backTo || props.crumbs.length > 1) && (
         <nav aria-label="Machine hierarchy" data-testid="breadcrumbs" className="flex items-center gap-1 overflow-x-auto whitespace-nowrap border-b bg-muted/30 px-3 py-1 text-xs text-muted-foreground">

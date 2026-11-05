@@ -4,6 +4,7 @@ import { SchematicViewer } from "@/components/viewer/schematic-viewer";
 import { fmtDate, one } from "@/components/ui-bits";
 import { requireOrgPage } from "@/lib/auth";
 import { ancestorsOf } from "@/lib/machine-tree";
+import { LIMIT_KEYS, toolAllowed, type ToolLimits } from "@/lib/tool-limits";
 import { canWriteMaintenance, levelAtLeast, type PermLevel } from "@/lib/permissions";
 
 export const metadata = { title: "Schematic viewer" };
@@ -65,6 +66,13 @@ export default async function ViewerPage({
   const revId = uuid(revision);
   const viewRevision = revId ? (revs ?? []).find((r) => r.id === revId) ?? null : null;
 
+  const [{ data: orgRow }, { data: me }] = await Promise.all([
+    s.supabase.from("organizations").select("tool_limits").eq("id", s.orgId).maybeSingle(),
+    s.supabase.from("profiles").select("display_name").eq("id", s.user.id).maybeSingle(),
+  ]);
+  const limits = (orgRow?.tool_limits ?? {}) as ToolLimits;
+  const allowedTools = LIMIT_KEYS.filter((k) => k !== "export" && k !== "share" && toolAllowed(s.role, k, limits));
+
   const canManage = levelAtLeast(level, "manage");
   const [members, groups] = canManage
     ? await Promise.all([
@@ -90,6 +98,11 @@ export default async function ViewerPage({
         revisions={(revs ?? []).map((r) => ({ id: r.id as string, label: r.revision as string, at: fmtDate(r.superseded_at as string, true) }))}
         viewRevision={viewRevision ? { id: viewRevision.id as string, label: viewRevision.revision as string } : null}
         canRevise={levelAtLeast(level, "edit")}
+        orgId={s.orgId}
+        userName={me?.display_name ?? s.user.email ?? ""}
+        allowedTools={allowedTools}
+        canExport={toolAllowed(s.role, "export", limits)}
+        canShare={toolAllowed(s.role, "share", limits)}
         canReport={canWriteMaintenance(s.role) && levelAtLeast(level, "comment")}
         meta={{
           documentNumber: sc.document_number,

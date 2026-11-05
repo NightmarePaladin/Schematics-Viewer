@@ -78,6 +78,12 @@ export interface ViewerProps {
   /** Set when an older, superseded revision is being viewed. */
   viewRevision: { id: string; label: string } | null;
   canRevise: boolean;
+  orgId: string;
+  userName: string;
+  /** Annotation tools this user's role may use (organization tool limits). */
+  allowedTools: string[];
+  canExport: boolean;
+  canShare: boolean;
 }
 
 export const STATUS_COLOR: Record<string, string> = {
