@@ -46,3 +46,6 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 *.tsbuildinfo
+
+# generated test drawings (npm run test-drawings)
+samples/test-drawings/*.pdf

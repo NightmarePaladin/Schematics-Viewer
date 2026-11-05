@@ -13,7 +13,8 @@
     "e2e": "playwright test",
     "seed": "tsx scripts/seed.ts",
     "seed:bob": "tsx scripts/seed-bob.ts",
-    "demo-pdf": "tsx scripts/make-demo-pdf.ts"
+    "demo-pdf": "tsx scripts/make-demo-pdf.ts",
+    "test-drawings": "tsx scripts/make-test-drawings.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
