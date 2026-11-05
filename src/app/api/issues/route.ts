@@ -38,7 +38,7 @@ export const POST = handler(async (req) => {
   if (input.annotation_id) {
     const { data: ann } = await s.supabase
       .from("annotations")
-      .select("id, schematic_id, page_number, schematics(machine_id)")
+      .select("id, schematic_id, page_number, schematics!annotations_schematic_id_org_id_fkey(machine_id)")
       .eq("id", input.annotation_id)
       .maybeSingle();
     if (!ann) throw notFound("Annotation");

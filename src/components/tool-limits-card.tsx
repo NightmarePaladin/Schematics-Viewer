@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { selectClass } from "@/components/ui-bits";
 import { ORG_ROLES, type OrgRole } from "@/lib/permissions";
 import { DEFAULT_MIN, LIMIT_KEYS, LIMIT_LABEL, minRoleFor, type LimitKey, type ToolLimits } from "@/lib/tool-limits";
+import { cn } from "@/lib/utils";
 
 const ROLE_LABEL: Record<OrgRole, string> = { viewer: "Viewer and up", technician: "Technician and up", maintenance_manager: "Maintenance manager and up", admin: "Admins only" };
 // Viewers can never annotate (their access is capped at View), so they are not offered for annotation tools or sharing.
@@ -44,7 +45,7 @@ export function ToolLimitsCard({ initial, canEdit }: { initial: ToolLimits; canE
               {LIMIT_LABEL[k]}
               {values[k] !== DEFAULT_MIN[k] && <span className="ml-2 rounded bg-amber-500/20 px-1.5 text-xs">changed</span>}
             </label>
-            <select id={`limit-${k}`} disabled={!canEdit || busy} value={values[k]} onChange={(e) => setValues((v) => ({ ...v, [k]: e.target.value as OrgRole }))} className={`${selectClass} w-56`}>
+            <select id={`limit-${k}`} disabled={!canEdit || busy} value={values[k]} onChange={(e) => setValues((v) => ({ ...v, [k]: e.target.value as OrgRole }))} className={cn(selectClass, "w-56 max-w-[55%] shrink-0")}>
               {OFFER(k).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
             </select>
           </li>

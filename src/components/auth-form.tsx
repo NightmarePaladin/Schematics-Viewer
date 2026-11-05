@@ -44,7 +44,8 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         }
       }
       const next = params.get("next");
-      router.replace(next && next.startsWith("/") ? next : "/");
+      // same-site paths only: "//host" and "/\host" would be read as another site
+      router.replace(next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");

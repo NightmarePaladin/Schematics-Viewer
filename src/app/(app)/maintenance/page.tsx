@@ -6,6 +6,7 @@ import { IssueActions } from "@/components/issue-actions";
 import { requireOrgPage } from "@/lib/auth";
 import { ISSUE_STATUSES, SEVERITIES } from "@/lib/schemas";
 import { ISSUE_SELECT } from "@/lib/selects";
+import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Maintenance Logs" };
 
@@ -33,10 +34,10 @@ export default async function MaintenancePage({ searchParams }: { searchParams: 
         <CardHeader><CardTitle>Issues</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <form className="flex flex-wrap gap-2" role="search">
-            <select name="status" defaultValue={status ?? ""} className={`${selectClass} w-44`} aria-label="Status">
+            <select name="status" defaultValue={status ?? ""} className={cn(selectClass, "w-44")} aria-label="Status">
               <option value="">All statuses</option>{ISSUE_STATUSES.map((v) => <option key={v} value={v}>{v.replace("_", " ")}</option>)}
             </select>
-            <select name="severity" defaultValue={severity ?? ""} className={`${selectClass} w-44`} aria-label="Severity">
+            <select name="severity" defaultValue={severity ?? ""} className={cn(selectClass, "w-44")} aria-label="Severity">
               <option value="">All severities</option>{SEVERITIES.map((v) => <option key={v} value={v}>{v}</option>)}
             </select>
             <Button type="submit" variant="secondary">Filter</Button>

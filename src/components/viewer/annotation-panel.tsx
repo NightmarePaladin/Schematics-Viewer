@@ -11,6 +11,7 @@ import { levelAtLeast, type PermLevel } from "@/lib/permissions";
 import { ISSUE_STATUSES, SEVERITIES } from "@/lib/schemas";
 import { Attachments } from "./attachments";
 import { api, colorFor, linkHref, one, type Ann, type Draft, type Reply } from "./types";
+import { cn } from "@/lib/utils";
 
 interface LinkOption { id: string; title: string; machine_name: string }
 
@@ -129,12 +130,12 @@ export function AnnotationPanel(p: Props) {
       <div className="space-y-1.5 border-b px-3 py-2" data-testid="annotation-filters">
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search notes…" aria-label="Search notes" className="h-8" />
         <div className="flex flex-wrap items-center gap-1.5">
-          <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label="Filter by status" className={`${selectClass} h-8 w-auto flex-1`}>
+          <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label="Filter by status" className={cn(selectClass, "h-8 w-auto flex-1")}>
             <option value="">Any status</option>
             <option value="none">No status</option>
             {ISSUE_STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
           </select>
-          <select value={fType} onChange={(e) => setFType(e.target.value)} aria-label="Filter by type" className={`${selectClass} h-8 w-auto flex-1`}>
+          <select value={fType} onChange={(e) => setFType(e.target.value)} aria-label="Filter by type" className={cn(selectClass, "h-8 w-auto flex-1")}>
             <option value="">Any type</option>
             {Object.entries(TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
@@ -323,7 +324,7 @@ function Thread(p: Props & { ann: Ann; number: number }) {
         </div>
         <div className="flex items-center gap-2">
           <label htmlFor="thread-status" className="text-xs text-muted-foreground">Status</label>
-          <select id="thread-status" value={ann.status ?? ""} disabled={!canEdit} onChange={(e) => setStatus(e.target.value)} className={`${selectClass} w-40`}>
+          <select id="thread-status" value={ann.status ?? ""} disabled={!canEdit} onChange={(e) => setStatus(e.target.value)} className={cn(selectClass, "w-40")}>
             <option value="">None</option>
             {ISSUE_STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
           </select>
