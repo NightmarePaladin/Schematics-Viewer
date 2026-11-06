@@ -62,6 +62,8 @@ export const POST = handler(async (req) => {
         title: input.title,
         description: input.description,
         severity: input.severity,
+        repair_priority: input.repair_priority,
+        status: input.status,
         assignee_id: input.assignee_id ?? null,
         reporter_id: s.user.id,
       })

@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { IssueStatusBadge, SeverityBadge, fmtDate, selectClass } from "@/components/ui-bits";
+import { IssueStatusBadge, PriorityBadge, SeverityBadge, fmtDate, selectClass } from "@/components/ui-bits";
+import { PRIORITY_LABEL, REPAIR_PRIORITIES, STATUS_LABEL, WORKING_STATUSES } from "@/lib/priority";
 import { levelAtLeast, type PermLevel } from "@/lib/permissions";
 import { ISSUE_STATUSES, SEVERITIES } from "@/lib/schemas";
 import { Attachments } from "./attachments";
@@ -374,7 +375,7 @@ function Thread(p: Props & { ann: Ann; number: number }) {
           <div className="rounded-lg border bg-muted/40 p-2 text-xs">
             <div className="mb-1 font-medium">Linked maintenance issue</div>
             <div>{issue.title}</div>
-            <div className="mt-1 flex gap-1"><SeverityBadge severity={issue.severity} /><IssueStatusBadge status={issue.status} /></div>
+            <div className="mt-1 flex flex-wrap gap-1"><PriorityBadge priority={(issue as { repair_priority?: string }).repair_priority} /><SeverityBadge severity={issue.severity} /><IssueStatusBadge status={issue.status} /></div>
           </div>
         ) : p.canReport ? (
           showIssue ? (
@@ -412,6 +413,8 @@ function Thread(p: Props & { ann: Ann; number: number }) {
 function IssueFromAnnotation({ ann, machineId, onDone }: { ann: Ann; machineId: string; onDone: () => Promise<void> }) {
   const [title, setTitle] = useState(ann.body.slice(0, 80));
   const [severity, setSeverity] = useState("medium");
+  const [priority, setPriority] = useState("normal");
+  const [workStatus, setWorkStatus] = useState("open");
   const [error, setError] = useState<string | null>(null);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -419,7 +422,7 @@ function IssueFromAnnotation({ ann, machineId, onDone }: { ann: Ann; machineId: 
       await api("/api/issues", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ machine_id: machineId, annotation_id: ann.id, title, description: ann.body, severity }),
+        body: JSON.stringify({ machine_id: machineId, annotation_id: ann.id, title, description: ann.body, severity, repair_priority: priority, status: workStatus }),
       });
       toast.success("Issue created");
       await onDone();
@@ -433,6 +436,14 @@ function IssueFromAnnotation({ ann, machineId, onDone }: { ann: Ann; machineId: 
       <select value={severity} onChange={(e) => setSeverity(e.target.value)} className={selectClass} aria-label="Severity">
         {SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
       </select>
+      <div className="grid grid-cols-2 gap-2">
+        <select value={priority} onChange={(e) => setPriority(e.target.value)} className={selectClass} aria-label="Priority of repair">
+          {REPAIR_PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]} priority</option>)}
+        </select>
+        <select value={workStatus} onChange={(e) => setWorkStatus(e.target.value)} className={selectClass} aria-label="Status">
+          {WORKING_STATUSES.map((st) => <option key={st} value={st}>{STATUS_LABEL[st]}</option>)}
+        </select>
+      </div>
       {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
       <Button size="sm" type="submit">Create issue</Button>
     </form>

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { selectClass } from "@/components/ui-bits";
 import { LOG_TYPES, SEVERITIES } from "@/lib/schemas";
+import { PRIORITY_LABEL, REPAIR_PRIORITIES, STATUS_LABEL, WORKING_STATUSES } from "@/lib/priority";
 import { cn } from "@/lib/utils";
 
 async function post(url: string, payload: unknown) {
@@ -69,6 +70,8 @@ export function IssueForm({ machineId }: { machineId: string }) {
         title: f.get("title"),
         description: f.get("description"),
         severity: f.get("severity"),
+        repair_priority: f.get("repair_priority"),
+        status: f.get("status"),
       });
       formEl.reset();
       router.refresh();
@@ -84,6 +87,18 @@ export function IssueForm({ machineId }: { machineId: string }) {
         <select name="severity" className={selectClass} aria-label="Severity" defaultValue="medium">
           {SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="space-y-1 text-xs text-muted-foreground">Priority of repair
+          <select name="repair_priority" className={selectClass} defaultValue="normal">
+            {REPAIR_PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
+          </select>
+        </label>
+        <label className="space-y-1 text-xs text-muted-foreground">Status
+          <select name="status" className={selectClass} defaultValue="open">
+            {WORKING_STATUSES.map((st) => <option key={st} value={st}>{STATUS_LABEL[st]}</option>)}
+          </select>
+        </label>
       </div>
       <Textarea name="description" rows={2} placeholder="Describe the problem" aria-label="Issue description" />
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

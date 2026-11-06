@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { statusLabel } from "@/lib/machine-status";
+import { PRIORITY_LABEL, type RepairPriority } from "@/lib/priority";
 import { cn } from "@/lib/utils";
 
 export function PageHeader({
@@ -47,14 +48,25 @@ const ISSUE: Record<string, string> = {
   resolved: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
 };
 
+const PRIORITY: Record<string, string> = {
+  low: "bg-muted text-muted-foreground",
+  normal: "bg-muted text-foreground",
+  high: "bg-orange-500/25 text-orange-900 dark:text-orange-200",
+  urgent: "bg-red-600 text-white",
+};
+
 const label = (v: string) => v.replace("_", " ");
 
 export const MachineStatusBadge = ({ status }: { status: string }) => (
   <Badge variant="secondary" className={cn("capitalize", MACHINE[status])}>{statusLabel(status)}</Badge>
 );
 export const SeverityBadge = ({ severity }: { severity: string }) => (
-  <Badge variant="secondary" className={cn("capitalize", SEVERITY[severity])}>{severity}</Badge>
+  <Badge variant="secondary" data-severity={severity} title="Severity of the fault" className={cn("capitalize", SEVERITY[severity])}>{severity} severity</Badge>
 );
+export const PriorityBadge = ({ priority }: { priority: string | null | undefined }) => {
+  const p = (priority ?? "normal") as RepairPriority;
+  return <Badge variant="secondary" data-priority={p} title="Priority of repair" className={cn(PRIORITY[p])}>{PRIORITY_LABEL[p] ?? p} priority</Badge>;
+};
 export const IssueStatusBadge = ({ status }: { status: string }) => (
   <Badge variant="secondary" data-status={status} className={cn("capitalize", ISSUE[status])}>{label(status)}</Badge>
 );

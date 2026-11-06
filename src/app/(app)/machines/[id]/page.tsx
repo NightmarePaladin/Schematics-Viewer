@@ -5,7 +5,7 @@ import { UploadForm } from "@/components/upload-form";
 import { WeatherPanel } from "@/components/weather-panel";
 import { linkButton } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Empty, IssueStatusBadge, MachineStatusBadge, Page, PageHeader, SeverityBadge, fmtDate, one } from "@/components/ui-bits";
+import { Empty, IssueStatusBadge, MachineStatusBadge, Page, PageHeader, PriorityBadge, SeverityBadge, fmtDate, one } from "@/components/ui-bits";
 import { requireOrgPage } from "@/lib/auth";
 import { effectiveCoords, firstOf, formatCoords } from "@/lib/location-utils";
 import { ancestorsOf, childrenOf } from "@/lib/machine-tree";
@@ -41,7 +41,7 @@ export default async function MachineDetail({ params, searchParams }: { params: 
       .select("id, title, document_number, revision, created_at, uploader:profiles!schematics_uploaded_by_fkey(display_name)")
       .eq("machine_id", id)
       .order("created_at", { ascending: false }),
-    s.supabase.from("maintenance_issues").select(ISSUE_SELECT).eq("machine_id", id).order("created_at", { ascending: false }),
+    s.supabase.from("maintenance_issues").select(ISSUE_SELECT).eq("machine_id", id).order("repair_priority", { ascending: false }).order("created_at", { ascending: false }),
     s.supabase
       .from("maintenance_logs")
       .select("id, body, entry_type, performed_at, performer:profiles!maintenance_logs_performed_by_fkey(display_name)")
@@ -185,7 +185,7 @@ export default async function MachineDetail({ params, searchParams }: { params: 
                   <li key={i.id} className="p-3 text-sm">
                     <div className="flex items-start justify-between gap-2">
                       <span className="font-medium">{i.title}</span>
-                      <span className="flex shrink-0 gap-1"><SeverityBadge severity={i.severity} /><IssueStatusBadge status={i.status} /></span>
+                      <span className="flex shrink-0 flex-wrap justify-end gap-1"><PriorityBadge priority={i.repair_priority} /><SeverityBadge severity={i.severity} /><IssueStatusBadge status={i.status} /></span>
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {one(i.reporter)?.display_name} · {fmtDate(i.created_at)}

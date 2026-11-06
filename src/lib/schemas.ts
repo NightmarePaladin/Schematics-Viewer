@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { REPAIR_PRIORITIES, WORKING_STATUSES } from "./priority";
 
 const trimmed = (max: number) => z.string().trim().min(1, "Required").max(max);
 const optionalText = (max: number) =>
@@ -168,6 +169,10 @@ export const issueCreateSchema = z.object({
   title: trimmed(160),
   description: z.string().trim().max(4000).default(""),
   severity: z.enum(SEVERITIES).default("medium"),
+  /** how soon it should be fixed (separate from severity) */
+  repair_priority: z.enum(REPAIR_PRIORITIES).default("normal"),
+  /** an issue starts open, or already in progress; it is resolved later, with a note */
+  status: z.enum(WORKING_STATUSES).default("open"),
   assignee_id: z.string().uuid().nullish(),
 });
 
@@ -176,6 +181,7 @@ export const issueUpdateSchema = z.object({
   description: z.string().trim().max(4000).optional(),
   status: z.enum(ISSUE_STATUSES).optional(),
   severity: z.enum(SEVERITIES).optional(),
+  repair_priority: z.enum(REPAIR_PRIORITIES).optional(),
   assignee_id: z.string().uuid().nullable().optional(),
   resolution_note: z.string().trim().max(4000).nullable().optional(),
 });
