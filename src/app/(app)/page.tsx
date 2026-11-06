@@ -1,3 +1,4 @@
+import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, IssueStatusBadge, Page, PageHeader, SeverityBadge, fmtDate, one } from "@/components/ui-bits";
@@ -42,10 +43,17 @@ export default async function Dashboard() {
       <PageHeader title="Dashboard" description="What you can see across your organization." />
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {stats.map((st) => (
-          <Link key={st.label} href={st.href}>
-            <Card className="transition-colors hover:bg-muted/50">
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-muted-foreground">{st.label}</CardTitle>
+          // The whole card is the link: it lifts and lights up on hover or keyboard focus, and the arrow shows it opens a page.
+          <Link
+            key={st.label}
+            href={st.href}
+            data-testid={`stat-${st.label.toLowerCase().replace(/\s+/g, "-")}`}
+            className="group block rounded-xl outline-none"
+          >
+            <Card className="h-full cursor-pointer transition-all duration-150 group-hover:-translate-y-0.5 group-hover:bg-primary/15 group-hover:shadow-md group-hover:ring-2 group-hover:ring-primary group-focus-visible:-translate-y-0.5 group-focus-visible:bg-primary/15 group-focus-visible:ring-2 group-focus-visible:ring-primary">
+              <CardHeader className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-muted-foreground group-hover:text-foreground group-focus-visible:text-foreground">{st.label}</CardTitle>
+                <ArrowUpRight aria-hidden className="size-4 text-muted-foreground opacity-40 transition-opacity group-hover:text-foreground group-hover:opacity-100 group-focus-visible:opacity-100" />
               </CardHeader>
               <CardContent className="text-3xl font-semibold tabular-nums">{st.value}</CardContent>
             </Card>
