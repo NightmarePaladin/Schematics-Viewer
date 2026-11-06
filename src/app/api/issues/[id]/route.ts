@@ -38,6 +38,19 @@ export const PATCH = handler<Ctx>(async (req, ctx) => {
   if (error) throw fromDbError(error);
   if (!data) throw new ApiError(403, "forbidden", "Only the reporter, the assignee or a manager can update this issue.");
 
+  if (patch.repair_priority && patch.repair_priority !== before.repair_priority) {
+    await s.supabase.from("maintenance_logs").insert({
+      org_id: before.org_id,
+      machine_id: before.machine_id,
+      issue_id: id,
+      schematic_id: before.schematic_id,
+      annotation_id: before.annotation_id,
+      entry_type: "note",
+      body: `Issue "${before.title}" repair priority changed from ${before.repair_priority} to ${patch.repair_priority}.`,
+      performed_by: s.user.id,
+    });
+  }
+
   if (patch.status && patch.status !== before.status) {
     await s.supabase.from("maintenance_logs").insert({
       org_id: before.org_id,

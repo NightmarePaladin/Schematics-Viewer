@@ -22,7 +22,7 @@ export default async function SettingsPage() {
     <Page className="max-w-3xl">
       <PageHeader title="Settings" />
       <div className="space-y-4">
-        <Card>
+        <Card id="account" className="scroll-mt-4">
           <CardHeader><CardTitle>Account</CardTitle></CardHeader>
           <CardContent className="space-y-1 text-sm">
             <div>{s.user.email}</div>
@@ -30,15 +30,15 @@ export default async function SettingsPage() {
             <div className="text-muted-foreground">Your role: <span className="capitalize">{m?.role.replace("_", " ")}</span></div>
           </CardContent>
         </Card>
-        <Card>
+        <Card id="display" className="scroll-mt-4">
           <CardHeader><CardTitle>Display and accessibility</CardTitle></CardHeader>
           <CardContent><AccessibilityPanel /></CardContent>
         </Card>
-        <Card>
+        <Card id="tool-permissions" className="scroll-mt-4">
           <CardHeader><CardTitle>Tool permissions</CardTitle></CardHeader>
           <CardContent><ToolLimitsCard initial={(org?.tool_limits ?? {}) as ToolLimits} canEdit={s.role === "admin"} /></CardContent>
         </Card>
-        <Card>
+        <Card id="roles" className="scroll-mt-4">
           <CardHeader><CardTitle>Roles in this workspace</CardTitle></CardHeader>
           <CardContent>
             <dl className="space-y-3 text-sm">

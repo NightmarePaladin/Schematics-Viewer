@@ -1,21 +1,23 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Empty, IssueStatusBadge, Page, PageHeader, SeverityBadge, fmtDate, one, selectClass } from "@/components/ui-bits";
+import { Empty, IssueStatusBadge, Page, PageHeader, PriorityBadge, SeverityBadge, fmtDate, one, selectClass } from "@/components/ui-bits";
 import { IssueActions } from "@/components/issue-actions";
 import { requireOrgPage } from "@/lib/auth";
+import { PRIORITY_LABEL, REPAIR_PRIORITIES } from "@/lib/priority";
 import { ISSUE_STATUSES, SEVERITIES } from "@/lib/schemas";
 import { ISSUE_SELECT } from "@/lib/selects";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Maintenance Logs" };
 
-export default async function MaintenancePage({ searchParams }: { searchParams: Promise<{ status?: string; severity?: string }> }) {
+export default async function MaintenancePage({ searchParams }: { searchParams: Promise<{ status?: string; severity?: string; priority?: string }> }) {
   const s = await requireOrgPage();
-  const { status, severity } = await searchParams;
-  let iq = s.supabase.from("maintenance_issues").select(ISSUE_SELECT).eq("org_id", s.orgId).order("created_at", { ascending: false });
+  const { status, severity, priority } = await searchParams;
+  let iq = s.supabase.from("maintenance_issues").select(ISSUE_SELECT).eq("org_id", s.orgId).order("repair_priority", { ascending: false }).order("created_at", { ascending: false });
   if (status && (ISSUE_STATUSES as readonly string[]).includes(status)) iq = iq.eq("status", status);
   if (severity && (SEVERITIES as readonly string[]).includes(severity)) iq = iq.eq("severity", severity);
+  if (priority && (REPAIR_PRIORITIES as readonly string[]).includes(priority)) iq = iq.eq("repair_priority", priority);
 
   const [issues, logs] = await Promise.all([
     iq,
@@ -40,18 +42,21 @@ export default async function MaintenancePage({ searchParams }: { searchParams: 
             <select name="severity" defaultValue={severity ?? ""} className={cn(selectClass, "w-44")} aria-label="Severity">
               <option value="">All severities</option>{SEVERITIES.map((v) => <option key={v} value={v}>{v}</option>)}
             </select>
+            <select name="priority" defaultValue={priority ?? ""} className={cn(selectClass, "w-44")} aria-label="Priority of repair">
+              <option value="">All priorities</option>{[...REPAIR_PRIORITIES].reverse().map((v) => <option key={v} value={v}>{PRIORITY_LABEL[v]}</option>)}
+            </select>
             <Button type="submit" variant="secondary">Filter</Button>
           </form>
           {issues.data?.length ? (
             <ul className="divide-y rounded-lg border">
               {issues.data.map((i) => (
-                <li key={i.id} className="space-y-1 p-3 text-sm">
+                <li key={i.id} data-testid="issue-row" className="space-y-1 p-3 text-sm">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <span className="font-medium">{i.title}</span>{" "}
                       <Link className="text-xs text-muted-foreground underline" href={`/machines/${i.machine_id}`}>{one(i.machine)?.name}</Link>
                     </div>
-                    <span className="flex gap-1"><SeverityBadge severity={i.severity} /><IssueStatusBadge status={i.status} /></span>
+                    <span className="flex flex-wrap gap-1"><PriorityBadge priority={i.repair_priority} /><SeverityBadge severity={i.severity} /><IssueStatusBadge status={i.status} /></span>
                   </div>
                   {i.description && <p className="text-muted-foreground">{i.description}</p>}
                   <div className="text-xs text-muted-foreground">
@@ -60,7 +65,7 @@ export default async function MaintenancePage({ searchParams }: { searchParams: 
                     {i.schematic_id && <> · <Link className="underline" href={`/schematics/${i.schematic_id}?page=${i.page_number ?? 1}`}>{one(i.schematic)?.title} p.{i.page_number}</Link></>}
                   </div>
                   {i.resolution_note && <p className="text-xs">Resolution: {i.resolution_note}</p>}
-                  {i.status !== "resolved" && <IssueActions issueId={i.id} status={i.status} />}
+                  {i.status !== "resolved" && <IssueActions issueId={i.id} status={i.status} priority={i.repair_priority} />}
                 </li>
               ))}
             </ul>

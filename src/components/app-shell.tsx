@@ -2,6 +2,7 @@
 
 import {
   Accessibility,
+  ChevronDown,
   ClipboardList,
   ScrollText,
   Cog,
@@ -34,6 +35,13 @@ const NAV = [
   { href: "/teams", label: "Teams", icon: Users },
   { href: "/settings", label: "Settings", icon: Cog },
 ];
+/** Sections of the Settings page, shown under "Settings" when it is expanded (ids match the cards on the page). */
+const SETTINGS_SECTIONS = [
+  { hash: "account", label: "Account" },
+  { hash: "display", label: "Display and accessibility" },
+  { hash: "tool-permissions", label: "Tool permissions" },
+  { hash: "roles", label: "Roles" },
+];
 /** Only organization admins see (and can open) the audit log. */
 const ADMIN_NAV = [{ href: "/audit", label: "Audit log", icon: ScrollText }];
 
@@ -52,6 +60,8 @@ export function AppShell({ children, user, role, orgId, orgs }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [a11yOpen, setA11yOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [hash, setHash] = useState("");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -63,6 +73,14 @@ export function AppShell({ children, user, role, orgId, orgs }: Props) {
     } catch {}
   }, []);
   useEffect(() => setMobileOpen(false), [pathname]);
+  // opening the Settings page expands its section list; the highlighted section follows the URL hash
+  useEffect(() => {
+    if (pathname.startsWith("/settings")) setSettingsOpen(true);
+    const read = () => setHash(window.location.hash.replace("#", ""));
+    read();
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, [pathname]);
 
   function toggle() {
     setCollapsed((c) => {
@@ -92,7 +110,45 @@ export function AppShell({ children, user, role, orgId, orgs }: Props) {
         <span className={cn("font-semibold tracking-wide", collapsed && "md:hidden")}>SchematicHub</span>
       </div>
       <ul className="flex-1 space-y-1 p-2">
-        {[...NAV, ...(role === "admin" ? ADMIN_NAV : [])].map(({ href, label, icon: Icon }) => (
+        {[...NAV, ...(role === "admin" ? ADMIN_NAV : [])].map(({ href, label, icon: Icon }) => href === "/settings" && !collapsed ? (
+          // Settings is a button here: pressing it opens or closes its sections underneath (and takes you to the page if you are elsewhere)
+          <li key={href}>
+            <button
+              type="button"
+              aria-expanded={settingsOpen}
+              aria-controls="settings-subnav"
+              data-testid="nav-settings"
+              onClick={() => {
+                if (!pathname.startsWith("/settings")) { setSettingsOpen(true); router.push("/settings"); } else setSettingsOpen((o) => !o);
+              }}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring",
+                isActive(href) && "bg-muted text-foreground",
+              )}
+            >
+              <Icon className="size-4 shrink-0" aria-hidden />
+              <span className="flex-1">{label}</span>
+              <ChevronDown className={cn("size-4 shrink-0 transition-transform", settingsOpen && "rotate-180")} aria-hidden />
+            </button>
+            <ul id="settings-subnav" hidden={!settingsOpen} className="mt-1 space-y-0.5 border-l pl-3 ml-5" data-testid="settings-subnav">
+              {SETTINGS_SECTIONS.map((sec) => {
+                const active = pathname.startsWith("/settings") && hash === sec.hash;
+                return (
+                  <li key={sec.hash}>
+                    <Link
+                      href={`/settings#${sec.hash}`}
+                      aria-current={active ? "location" : undefined}
+                      onClick={() => { setHash(sec.hash); setMobileOpen(false); }} // pushState navigations fire no hashchange event
+                      className={cn("block rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring", active && "bg-muted font-medium text-foreground")}
+                    >
+                      {sec.label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </li>
+        ) : (
           <li key={href}>
             <Link
               href={href}

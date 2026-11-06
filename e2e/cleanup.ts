@@ -15,6 +15,18 @@ export async function cleanupE2eData() {
   await admin.from("maintenance_logs").delete().ilike("body", 'Issue "Coil overheating %');
   if (issueIds.length) await admin.from("maintenance_issues").delete().in("id", issueIds);
 
+  // issues and log entries created by dashboard.spec / issue-priority.spec
+  for (const pattern of ["E2E dash issue %", "E2E prio %"]) {
+    const { data: rows } = await admin.from("maintenance_issues").select("id").ilike("title", pattern);
+    const ids = (rows ?? []).map((i) => i.id);
+    if (ids.length) {
+      await admin.from("maintenance_logs").delete().in("issue_id", ids);
+      await admin.from("maintenance_issues").delete().in("id", ids);
+    }
+  }
+  await admin.from("maintenance_logs").delete().ilike("body", "E2E dash log %");
+  await admin.from("maintenance_logs").delete().ilike("body", 'Issue "E2E prio %');
+
   // annotations created by viewer-flows / annotation-flow
   for (const pattern of ["Box %: coil overheating", "Callout %: verify 24 VDC", "E2E pinned note%", "E2E mobile%"]) {
     await admin.from("annotations").delete().ilike("body", pattern);
