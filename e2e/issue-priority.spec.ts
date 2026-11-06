@@ -73,3 +73,38 @@ test("a viewer cannot change an issue's priority", async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId("issue-row").filter({ hasText: title })).toContainText("Low priority");
 });
+
+test("machine page: change the priority of an open job right in the list; it sticks, and a viewer only sees the badge", async ({ page, browser }) => {
+  await signIn(page, "tech@schematichub.test");
+  await page.goto("/machines");
+  await page.getByRole("link", { name: "Hydraulic Press 7" }).first().click();
+  await page.waitForURL(/\/machines\/[0-9a-f-]{36}/); // the click navigates client-side: wait before reading the URL
+  const machineUrl = page.url();
+
+  // the issue from the first test is still open (priority Low); its row has a priority dropdown
+  const row = page.locator("li", { hasText: title }).filter({ has: page.locator("select") });
+  const select = row.getByLabel("Priority of repair");
+  await expect(select).toHaveValue("low");
+  // the dropdown updates at once; wait for the save itself before reloading
+  await Promise.all([
+    page.waitForResponse((r) => r.url().includes("/api/issues/") && r.request().method() === "PATCH" && r.ok()),
+    select.selectOption("urgent"),
+  ]);
+  await expect(row.getByLabel("Priority of repair")).toHaveValue("urgent");
+  await expect(row.getByLabel("Priority of repair")).toHaveAttribute("data-priority", "urgent");
+
+  // saved: still urgent after a reload, and the change is in the maintenance log
+  await page.reload();
+  await expect(page.locator("li", { hasText: title }).filter({ has: page.locator("select") }).getByLabel("Priority of repair")).toHaveValue("urgent");
+  await expect(page.getByText(`Issue "${title}" repair priority changed from low to urgent.`).first()).toBeVisible();
+
+  // someone who cannot edit jobs (the viewer role) sees the priority as a badge, with no dropdown
+  const ctx = await browser.newContext();
+  const v = await ctx.newPage();
+  await signIn(v, "viewer@schematichub.test");
+  await v.goto(machineUrl);
+  const viewerRow = v.locator("li", { hasText: title }).filter({ has: v.locator('[data-priority="urgent"]') });
+  await expect(viewerRow.first()).toContainText("Urgent priority");
+  await expect(viewerRow.first().locator("select")).toHaveCount(0);
+  await ctx.close();
+});

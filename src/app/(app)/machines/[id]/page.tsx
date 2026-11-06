@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { IssuePrioritySelect } from "@/components/issue-priority-select";
 import { LogForm, IssueForm } from "@/components/maintenance-forms";
 import { UploadForm } from "@/components/upload-form";
 import { WeatherPanel } from "@/components/weather-panel";
@@ -81,7 +82,7 @@ export default async function MachineDetail({ params, searchParams }: { params: 
       {causes.length > 0 && (
         <div role="alert" data-testid="inoperable-banner" className="mb-4 rounded-lg border border-red-500/50 bg-red-500/10 p-3 text-sm">
           <p className="font-semibold text-red-700 dark:text-red-300">Inoperable — inherited from a critical sub-machine</p>
-          <p className="text-muted-foreground">
+          <p className="text-foreground/85">
             {causes.map((c, i) => (
               <span key={c.id}>{i > 0 && ", "}{c.name ? <Link className="underline" href={`/machines/${c.id}`}>{c.name}</Link> : "a restricted sub-machine"}</span>
             ))}{" "}
@@ -92,7 +93,7 @@ export default async function MachineDetail({ params, searchParams }: { params: 
       {causing.has(id) && (
         <div role="status" data-testid="causing-notice" className="mb-4 rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
           <p className="font-semibold text-amber-800 dark:text-amber-300">Critical component with an unresolved major issue</p>
-          <p className="text-muted-foreground">
+          <p className="text-foreground/85">
             Until it is resolved, {takenDown.length > 0 ? takenDown.map((n, i) => (<span key={n.id}>{i > 0 && ", "}<Link className="underline" href={`/machines/${n.id}`}>{n.name}</Link></span>)) : "its parent system"}{" "}
             {takenDown.length === 1 ? "is" : "are"} treated as inoperable.
           </p>
@@ -185,7 +186,13 @@ export default async function MachineDetail({ params, searchParams }: { params: 
                   <li key={i.id} className="p-3 text-sm">
                     <div className="flex items-start justify-between gap-2">
                       <span className="font-medium">{i.title}</span>
-                      <span className="flex shrink-0 flex-wrap justify-end gap-1"><PriorityBadge priority={i.repair_priority} /><SeverityBadge severity={i.severity} /><IssueStatusBadge status={i.status} /></span>
+                      <span className="flex shrink-0 flex-wrap items-start justify-end gap-1">
+                        {/* open jobs can be re-prioritised right here by people who may edit them; everyone else sees the badge */}
+                        {i.status !== "resolved" && canWriteMaintenance(s.role)
+                          ? <IssuePrioritySelect issueId={i.id} priority={i.repair_priority} />
+                          : <PriorityBadge priority={i.repair_priority} />}
+                        <SeverityBadge severity={i.severity} /><IssueStatusBadge status={i.status} />
+                      </span>
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {one(i.reporter)?.display_name} · {fmtDate(i.created_at)}
