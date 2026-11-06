@@ -11,6 +11,7 @@ import {
   type NormPoint,
   type Rotation,
 } from "@/lib/coords";
+import { STATUS_GLYPH, type StatusKey } from "@/lib/accessibility";
 import { colorFor, one, type Ann, type AnnType, type Draft, type Path } from "./types";
 
 export type Tool = "select" | "pan" | AnnType;
@@ -149,6 +150,7 @@ export function AnnotationOverlay({
             onClick: (e: React.MouseEvent) => { e.stopPropagation(); onSelect(a.id); },
             onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(a.id); } },
           };
+          const glyph = (x: number, y: number) => <StatusGlyph x={x} y={y} status={a.status} color={color} />;
           const linkBadge = (x: number, y: number) =>
             one(a.linked) || a.link_broken_at ? <LinkBadge x={x} y={y} color={color} broken={!!a.link_broken_at} /> : null;
 
@@ -169,6 +171,7 @@ export function AnnotationOverlay({
                 <circle cx={first.x} cy={first.y} r={9} fill={color} stroke="#fff" strokeWidth={1.5} />
                 <text x={first.x} y={first.y + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#fff">{idx + 1}</text>
                 {linkBadge(first.x + 12, first.y - 12)}
+                {glyph(first.x + 9, first.y + 9)}
               </g>
             );
           }
@@ -185,18 +188,22 @@ export function AnnotationOverlay({
                 <circle cx={o.x} cy={o.y} r={10} fill={hl ? "#ca8a04" : color} />
                 <text x={o.x} y={o.y + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff">{idx + 1}</text>
                 {linkBadge(o.x + 14, o.y)}
+                {glyph(o.x + 9, o.y + 9)}
               </g>
             );
           }
           const c = px(storedToDisplayed({ x: a.x, y: a.y }, rotation));
           return (
             <g key={a.id} {...common} data-cx={c.x} data-cy={c.y}>
-              <circle cx={c.x} cy={c.y} r={22} fill="transparent" /> {/* finger-sized tap target */}
-              {sel && <circle cx={c.x} cy={c.y} r={16} fill="none" stroke={color} strokeWidth={2} />}
-              <circle cx={c.x} cy={c.y} r={11} fill={color} stroke="#fff" strokeWidth={2} />
-              <text x={c.x} y={c.y + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff">{idx + 1}</text>
-              {linkBadge(c.x + 12, c.y - 12)}
-              {a.type === "comment" && <path d={`M${c.x - 4} ${c.y + 10} l4 6 l4 -6 z`} fill={color} />}
+              <g className="marker-pt">
+                <circle cx={c.x} cy={c.y} r={22} fill="transparent" /> {/* finger-sized tap target */}
+                {sel && <circle cx={c.x} cy={c.y} r={16} fill="none" stroke={color} strokeWidth={2} />}
+                <circle cx={c.x} cy={c.y} r={11} fill={color} stroke="#fff" strokeWidth={2} />
+                <text x={c.x} y={c.y + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff">{idx + 1}</text>
+                {linkBadge(c.x + 12, c.y - 12)}
+                {glyph(c.x + 9, c.y + 9)}
+                {a.type === "comment" && <path d={`M${c.x - 4} ${c.y + 10} l4 6 l4 -6 z`} fill={color} />}
+              </g>
             </g>
           );
         })}
@@ -237,6 +244,18 @@ function LinkBadge({ x, y, color, broken }: { x: number; y: number; color: strin
     <g data-testid="link-badge" pointerEvents="none">
       <circle cx={x} cy={y} r={8} fill="#fff" stroke={color} strokeWidth={1.5} />
       <path d={`M${x - 3} ${y + 3} L${x + 3} ${y - 3} M${x - 1} ${y - 3} H${x + 3} V${y + 1}`} fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+    </g>
+  );
+}
+
+/** Status symbol next to a marker (! open, ... in progress, check resolved). Hidden by CSS unless the user turned symbols on. */
+function StatusGlyph({ x, y, status, color }: { x: number; y: number; status: string | null; color: string }) {
+  const key: StatusKey = status === "open" || status === "in_progress" || status === "resolved" ? status : "none";
+  if (!STATUS_GLYPH[key]) return null;
+  return (
+    <g className="status-glyph" pointerEvents="none" data-testid="status-glyph" data-glyph={key}>
+      <circle cx={x} cy={y} r={7} fill="#fff" stroke={color} strokeWidth={1.5} />
+      <text x={x} y={y + 3.5} textAnchor="middle" fontSize={10} fontWeight={800} fill={color}>{STATUS_GLYPH[key]}</text>
     </g>
   );
 }

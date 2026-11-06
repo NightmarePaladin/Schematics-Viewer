@@ -152,3 +152,105 @@ select { background-color: var(--background); color: var(--foreground); }
 select option, select optgroup { background-color: var(--popover); color: var(--popover-foreground); }
 select option:disabled { color: var(--muted-foreground); }
 select:disabled { opacity: 0.6; }
+
+
+/* ───────────── Accessibility preferences (see src/lib/accessibility.ts; set as data-* attributes on <html>) ───────────── */
+:root {
+  --status-open: #dc2626;
+  --status-in-progress: #0284c7;
+  --status-resolved: #16a34a;
+  --status-none: #d97706;
+}
+
+/* text size: everything is rem-based, so scaling the root scales the whole UI */
+:root[data-text="large"] { font-size: 112.5%; }
+:root[data-text="xlarge"] { font-size: 125%; }
+
+/* high contrast: darker text, stronger lines (the .dark rule comes later so it wins in dark mode) */
+:root[data-contrast="high"] {
+  --foreground: oklch(0 0 0);
+  --card-foreground: oklch(0 0 0);
+  --muted-foreground: oklch(0.32 0 0);
+  --border: oklch(0.38 0 0);
+  --input: oklch(0.32 0 0);
+  --ring: oklch(0.3 0.12 255);
+  --sidebar-border: oklch(0.38 0 0);
+}
+.dark[data-contrast="high"] {
+  --foreground: oklch(1 0 0);
+  --card-foreground: oklch(1 0 0);
+  --muted-foreground: oklch(0.9 0 0);
+  --border: oklch(1 0 0 / 60%);
+  --input: oklch(1 0 0 / 65%);
+  --ring: oklch(0.85 0.12 255);
+  --sidebar-border: oklch(1 0 0 / 60%);
+}
+:root[data-contrast="high"] main { --tw-prose-body: currentColor; }
+
+/* readable font: wider letterforms, more spacing */
+:root[data-font="readable"] body {
+  font-family: Verdana, "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  word-spacing: 0.08em;
+  line-height: 1.65;
+}
+
+/* strong keyboard focus */
+:root[data-focus="strong"] :focus-visible {
+  outline: 3px solid var(--foreground) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 5px var(--background) !important;
+}
+
+/* underline links */
+:root[data-links="on"] main a:not([role="button"]),
+:root[data-links="on"] nav a { text-decoration: underline; text-underline-offset: 2px; }
+
+/* bigger click / tap targets */
+:root[data-targets="large"] button,
+:root[data-targets="large"] [role="tab"],
+:root[data-targets="large"] select,
+:root[data-targets="large"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]) {
+  min-height: 2.75rem;
+}
+:root[data-targets="large"] button:has(> svg:only-child) { min-width: 2.75rem; }
+:root[data-targets="large"] input[type="checkbox"],
+:root[data-targets="large"] input[type="radio"] { width: 1.35rem; height: 1.35rem; }
+
+/* reduce motion: the user's choice, or else the device setting */
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-motion="system"] *,
+  :root[data-motion="system"] *::before,
+  :root[data-motion="system"] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* status badges follow the chosen palette, and gain a symbol when symbols are on */
+:root:not([data-cvd="none"]) [data-status="open"] { background-color: color-mix(in srgb, var(--status-open) 18%, transparent); color: var(--foreground); }
+:root:not([data-cvd="none"]) [data-status="in_progress"] { background-color: color-mix(in srgb, var(--status-in-progress) 18%, transparent); color: var(--foreground); }
+:root:not([data-cvd="none"]) [data-status="resolved"] { background-color: color-mix(in srgb, var(--status-resolved) 18%, transparent); color: var(--foreground); }
+:root[data-shapes="on"] [data-status="open"]::before { content: "! "; font-weight: 700; }
+:root[data-shapes="on"] [data-status="in_progress"]::before { content: "\2026  "; font-weight: 700; }
+:root[data-shapes="on"] [data-status="resolved"]::before { content: "\2713  "; font-weight: 700; }
+
+/* symbols on drawing markers: hidden unless symbols are on */
+.status-glyph { display: none; }
+:root[data-shapes="on"] .status-glyph { display: inline; }
+/* larger markers */
+:root[data-markers="large"] .marker-pt { transform: scale(1.6); transform-box: fill-box; transform-origin: center; }
+
+/* skip link */
+.skip-link { position: absolute; left: 0.5rem; top: -4rem; z-index: 100; border-radius: 0.5rem; background: var(--background); color: var(--foreground); padding: 0.5rem 0.9rem; border: 2px solid var(--foreground); font-weight: 600; }
+.skip-link:focus { top: 0.5rem; }

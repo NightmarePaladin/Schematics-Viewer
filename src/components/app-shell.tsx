@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Accessibility,
   ClipboardList,
   ScrollText,
   Cog,
@@ -18,8 +19,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
+import { AccessibilityPanel } from "@/components/accessibility-panel";
 import { NotificationBell } from "@/components/notification-bell";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { clearOffline } from "@/lib/offline";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +51,7 @@ export function AppShell({ children, user, role, orgId, orgs }: Props) {
   const { resolvedTheme, setTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [a11yOpen, setA11yOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -134,6 +138,7 @@ export function AppShell({ children, user, role, orgId, orgs }: Props) {
 
   return (
     <div className="flex h-dvh overflow-hidden print:block print:h-auto print:overflow-visible">
+      <a href="#main" className="skip-link">Skip to main content</a>
       <aside
         className={cn(
           "hidden shrink-0 border-r bg-sidebar text-sidebar-foreground transition-[width] md:block print:hidden",
@@ -165,6 +170,9 @@ export function AppShell({ children, user, role, orgId, orgs }: Props) {
             {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
           </Button>
           <div className="ml-auto flex items-center gap-2">
+            <Button variant="ghost" size="icon" aria-label="Display and accessibility settings" title="Display and accessibility" data-testid="open-a11y" onClick={() => setA11yOpen(true)}>
+              <Accessibility />
+            </Button>
             <NotificationBell userId={user.id} />
             {orgs.length > 1 ? (
               <select
@@ -192,10 +200,19 @@ export function AppShell({ children, user, role, orgId, orgs }: Props) {
             </Button>
           </div>
         </header>
-        <main id="main" className="min-h-0 flex-1 overflow-auto print:overflow-visible">
+        <main id="main" tabIndex={-1} className="min-h-0 flex-1 overflow-auto outline-none print:overflow-visible">
           {children}
         </main>
       </div>
+      <Dialog open={a11yOpen} onOpenChange={setA11yOpen}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Display and accessibility</DialogTitle>
+            <DialogDescription>Colours, text size, contrast and controls. Changes apply immediately.</DialogDescription>
+          </DialogHeader>
+          <AccessibilityPanel />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
