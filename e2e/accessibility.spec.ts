@@ -179,6 +179,12 @@ for (const mode of MODES) {
       await page.waitForLoadState("networkidle");
       found[name] = await seriousViolations(page);
     }
+    // a machine page (priority dropdowns on open jobs, badges, forms)
+    await page.goto("/machines");
+    await page.getByRole("link", { name: "Hydraulic Press 7" }).first().click();
+    await page.waitForURL(/\/machines\/[0-9a-f-]{36}/);
+    await page.waitForLoadState("networkidle");
+    found.machine = await seriousViolations(page);
     await openDemoDrawing(page);
     found.viewer = await seriousViolations(page);
     const all = Object.entries(found).filter(([, v]) => v.length);
